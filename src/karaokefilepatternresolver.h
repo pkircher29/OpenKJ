@@ -11,7 +11,7 @@ public:
 
     struct KaraokeFilePattern
     {
-        SourceDir::NamingPattern pattern;
+        SourceDir::NamingPattern pattern{SourceDir::SAT};
         CustomPattern customPattern;
     };
 

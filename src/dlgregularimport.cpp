@@ -180,16 +180,16 @@ void DlgRegularImport::on_pushButtonImportAll_clicked()
 QStringList DlgRegularImport::legacyLoadSingerList(const QString &fileName)
 {
     QStringList singers;
-    QFile *xmlFile = new QFile(fileName);
-    xmlFile->open(QIODevice::ReadOnly);
-    QXmlStreamReader xml(xmlFile);
+    QFile xmlFile(fileName);
+    xmlFile.open(QIODevice::ReadOnly);
+    QXmlStreamReader xml(&xmlFile);
     while (!xml.isEndDocument())
     {
         xml.readNext();
         if ((xml.isStartElement()) && (xml.name() == "singer"))
             singers << xml.attributes().value("name").toString();
     }
-    xmlFile->close();
+    xmlFile.close();
     singers.sort();
     return singers;
 }
@@ -212,9 +212,9 @@ QStringList DlgRegularImport::loadSingerList(const QString &filename)
 QStringList DlgRegularImport::legacyImportSinger(const QString &name)
 {
     QStringList missingSongs;
-    QFile *xmlFile = new QFile(m_curImportFile);
-    xmlFile->open(QIODevice::ReadOnly);
-    QXmlStreamReader xml(xmlFile);
+    QFile xmlFile(m_curImportFile);
+    xmlFile.open(QIODevice::ReadOnly);
+    QXmlStreamReader xml(&xmlFile);
     bool done = false;
     while ((!xml.isEndDocument()) && (!done))
     {
@@ -235,8 +235,12 @@ QStringList DlgRegularImport::legacyImportSinger(const QString &name)
                     QString title = xml.attributes().value("title").toString();
                     int keyChg = xml.attributes().value("key").toInt();
 
-                    QString sql = "SELECT path FROM dbsongs WHERE artist == \"" + artist + "\" AND title == \"" + title + "\" AND discid == \"" + songId + "\" LIMIT 1";
-                    query.exec(sql);
+                    query.prepare("SELECT path FROM dbsongs WHERE artist = :artist AND title = :title "
+                                  "AND discid = :discid LIMIT 1");
+                    query.bindValue(":artist", artist);
+                    query.bindValue(":title", title);
+                    query.bindValue(":discid", songId);
+                    query.exec();
                     if (query.first())
                     {
                         QString path = query.value(0).toString();
@@ -254,8 +258,12 @@ QStringList DlgRegularImport::legacyImportSinger(const QString &name)
                             else
                                 break;
                         }
-                       sql = "SELECT path FROM dbsongs WHERE artist == \"" + artist + "\" AND title == \"" + title + "\" AND discid LIKE \"%" + vendorPart + "%\" LIMIT 1";
-                       query.exec(sql);
+                       query.prepare("SELECT path FROM dbsongs WHERE artist = :artist AND title = :title "
+                                     "AND discid LIKE :vendor LIMIT 1");
+                       query.bindValue(":artist", artist);
+                       query.bindValue(":title", title);
+                       query.bindValue(":vendor", "%" + vendorPart + "%");
+                       query.exec();
                        if (query.first())
                        {
                            QString path = query.value(0).toString();
@@ -282,7 +290,7 @@ QStringList DlgRegularImport::legacyImportSinger(const QString &name)
             done = true;
         }
     }
-    xmlFile->close();
+    xmlFile.close();
     return missingSongs;
 }
 

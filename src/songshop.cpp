@@ -7,6 +7,8 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QDir>
+#include <QSaveFile>
+#include <QUrlQuery>
 
 
 SongShop::SongShop(QObject *parent) : QObject(parent) {
@@ -28,7 +30,8 @@ void SongShop::updateCache() {
     jsonDocument.setObject(mainObject);
     QNetworkRequest request(QUrl("https://db.openkj.org/apigetsongs_v2"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    manager->post(request, jsonDocument.toJson());
+    auto reply = manager->post(request, jsonDocument.toJson());
+    reply->setProperty("requestType", "catalog");
 }
 
 ShopSongs SongShop::getSongs() {
@@ -39,34 +42,40 @@ ShopSongs SongShop::getSongs() {
 
 void SongShop::knLogin(QString userName, QString password) {
     knLoginError = false;
-    QByteArray md5hash = QCryptographicHash::hash(
-            QByteArray::fromRawData((const char *) password.toLocal8Bit(), password.length()),
-            QCryptographicHash::Md5).toHex();
-    QString passHash = QString(md5hash);
-    QString urlstr =
-            "https://www.partytyme.net/songshop/cat/api_account_setup.php?action=validate_login&username=" + userName +
-            "&md5=" + passHash + "&merchant=99";
-    QUrl url = QUrl(urlstr);
+    const QString passHash = QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Md5).toHex();
+    QUrl url("https://www.partytyme.net/songshop/cat/api_account_setup.php");
+    QUrlQuery query;
+    query.addQueryItem("action", "validate_login");
+    query.addQueryItem("username", userName);
+    query.addQueryItem("md5", passHash);
+    query.addQueryItem("merchant", "99");
+    url.setQuery(query);
     QNetworkRequest request(url);
-    manager->get(request);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request.setTransferTimeout(30000);
+#endif
+    auto reply = manager->get(request);
+    reply->setProperty("requestType", "login");
 }
 
 void SongShop::knPurchase(QString songId, QString ccNumber, QString ccM, QString ccY, QString ccCVV) {
-    QString urlstr = "https://www.partytyme.net/songshop/cat/api_make_order.php?";
-    if (songId.contains("PY"))
-        urlstr += "media_format=mp3g&";
-    else
-        urlstr += "media_format=mp4&";
-    urlstr += "tracks=" + songId + "&";
-    urlstr += "cc_number=" + ccNumber + "&";
-    urlstr += "cc_cvv=" + ccCVV + "&";
-    urlstr += "cc_exp_mm=" + ccM + "&";
-    urlstr += "cc_exp_yyyy=" + ccY + "&";
-    urlstr += "session_id=" + knSessionId + "&";
-    urlstr += "merchant=99";
-    QUrl url = QUrl(urlstr);
+    QUrl url("https://www.partytyme.net/songshop/cat/api_make_order.php");
+    QUrlQuery query;
+    query.addQueryItem("media_format", songId.contains("PY") ? "mp3g" : "mp4");
+    query.addQueryItem("tracks", songId);
+    query.addQueryItem("cc_number", ccNumber);
+    query.addQueryItem("cc_cvv", ccCVV);
+    query.addQueryItem("cc_exp_mm", ccM);
+    query.addQueryItem("cc_exp_yyyy", ccY);
+    query.addQueryItem("session_id", knSessionId);
+    query.addQueryItem("merchant", "99");
+    url.setQuery(query);
     QNetworkRequest request(url);
-    manager->get(request);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request.setTransferTimeout(30000);
+#endif
+    auto reply = manager->get(request);
+    reply->setProperty("requestType", "purchase");
 }
 
 bool SongShop::loggedIn() {
@@ -83,21 +92,42 @@ void SongShop::setDlSongInfo(QString artist, QString title, QString songId) {
 
 void SongShop::downloadFile(const QString &url, const QString &destFn) {
     QString destDir = m_settings.storeDownloadDir();
-    if (!QDir(destDir).exists())
-        QDir().mkdir(destDir);
-    QString destPath = destDir + destFn;
+    if (!QDir().mkpath(destDir)) {
+        m_logger->error("{} Could not create download directory: {}", m_loggingPrefix, destDir);
+        emit paymentProcessingFailed();
+        return;
+    }
+    const QString safeFileName = QFileInfo(destFn).fileName();
+    if (safeFileName.isEmpty()) {
+        m_logger->error("{} Refusing download with an empty destination filename", m_loggingPrefix);
+        emit paymentProcessingFailed();
+        return;
+    }
+    const QString destPath = QDir(destDir).filePath(safeFileName);
     QNetworkAccessManager m_NetworkMngr;
-    QNetworkReply *reply = m_NetworkMngr.get(QNetworkRequest(url));
+    QNetworkRequest request(url);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request.setTransferTimeout(120000);
+#endif
+    QNetworkReply *reply = m_NetworkMngr.get(request);
     QEventLoop loop;
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     connect(reply, &QNetworkReply::downloadProgress, this, &SongShop::onDownloadProgress);
     loop.exec();
-    QUrl aUrl(url);
-    QFileInfo fileInfo = aUrl.path();
-    QFile file(destPath);
-    file.open(QIODevice::WriteOnly);
-    file.write(reply->readAll());
+    if (reply->error() != QNetworkReply::NoError) {
+        m_logger->error("{} Song download failed: {}", m_loggingPrefix, reply->errorString());
+        delete reply;
+        emit paymentProcessingFailed();
+        return;
+    }
+    const QByteArray downloadData = reply->readAll();
     delete reply;
+    QSaveFile file(destPath);
+    if (!file.open(QIODevice::WriteOnly) || file.write(downloadData) != downloadData.size() || !file.commit()) {
+        m_logger->error("{} Could not save downloaded song to: {}", m_loggingPrefix, destPath);
+        emit paymentProcessingFailed();
+        return;
+    }
     emit karaokeSongDownloaded(destPath);
     // clear session ID to force login again before next download.  Workaround for expiring PartyTyme logins.
     knSessionId = "";
@@ -110,9 +140,17 @@ void SongShop::onSslErrors(QNetworkReply *reply, QList<QSslError> errors) {
 
 void SongShop::onNetworkReply(QNetworkReply *reply) {
     m_logger->trace("{} Received network reply from db.openkj.org", m_loggingPrefix);
+    const QString requestType = reply->property("requestType").toString();
+    reply->deleteLater();
     if (reply->error() != QNetworkReply::NoError) {
         m_logger->warn("{} Error connecting to server: {}", m_loggingPrefix, reply->errorString());
-        //output some meaningful error msg
+        if (requestType == "login") {
+            knLoginError = true;
+            knSessionId.clear();
+            emit knLoginFailure();
+        } else if (requestType == "purchase") {
+            emit paymentProcessingFailed();
+        }
         return;
     }
     QByteArray data = reply->readAll();
@@ -121,6 +159,13 @@ void SongShop::onNetworkReply(QNetworkReply *reply) {
     bool error = json.object().value("error").toBool();
     if (error) {
         m_logger->warn("{} Received error reply from server: {}", m_loggingPrefix, json.object().value("errorString").toString());
+        if (requestType == "login") {
+            knLoginError = true;
+            knSessionId.clear();
+            emit knLoginFailure();
+        } else if (requestType == "purchase") {
+            emit paymentProcessingFailed();
+        }
         return;
     }
     if (command == "getsongs") {
@@ -170,8 +215,16 @@ void SongShop::onNetworkReply(QNetworkReply *reply) {
     } else if ((json.object().value("result").toString() == "ERROR") &&
                (json.object().value("error").toString() == "Payment failed. Check your credit card details.")) {
         emit paymentProcessingFailed();
-    } else
+    } else {
         m_logger->warn("{} Unexpected JSON data received: {}", m_loggingPrefix, data.toStdString());
+        if (requestType == "login") {
+            knLoginError = true;
+            knSessionId.clear();
+            emit knLoginFailure();
+        } else if (requestType == "purchase") {
+            emit paymentProcessingFailed();
+        }
+    }
 }
 
 void SongShop::onDownloadProgress(qint64 received, qint64 total) {

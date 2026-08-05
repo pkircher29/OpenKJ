@@ -20,8 +20,8 @@ public:
     QString title;
     QString songid;
     QString vendor;
-    int type;
-    double price;
+    int type{0};
+    double price{0.0};
     bool operator == (const ShopSong r) const;
 };
 

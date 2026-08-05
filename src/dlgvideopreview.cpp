@@ -19,7 +19,7 @@ DlgVideoPreview::DlgVideoPreview(QString mediaFilePath, QWidget *parent) :
     if (!QFile(m_mediaFilename).exists()) {
         m_logger->warn("{} Bad karaoke file - file missing - {}", m_loggingPrefix, m_mediaFilename);
         QMessageBox::warning(nullptr, tr("Bad karaoke file"), tr("File missing."), QMessageBox::Ok);
-        QTimer::singleShot(250, [&] () { if (ui) close(); });
+        QTimer::singleShot(250, this, [this] { close(); });
         return;
     }
     m_mediaBackend.setVideoOutputWidgets({ui->videoDisplay});
@@ -34,7 +34,7 @@ DlgVideoPreview::DlgVideoPreview(QString mediaFilePath, QWidget *parent) :
                                    m_loggingPrefix, m_mediaFilename);
                     QMessageBox::warning(nullptr, tr("Bad karaoke file"), tr("Failed to extract audio file."),
                                          QMessageBox::Ok);
-                    QTimer::singleShot(250, [&] () { if (ui) close(); });
+                    QTimer::singleShot(250, this, [this] { close(); });
                     return;
                 }
                 if (!archive.extractCdg(m_tmpDir.path(), "tmp.cdg")) {
@@ -42,7 +42,7 @@ DlgVideoPreview::DlgVideoPreview(QString mediaFilePath, QWidget *parent) :
                                    m_mediaFilename);
                     QMessageBox::warning(nullptr, tr("Bad karaoke file"), tr("Failed to extract CDG file."),
                                          QMessageBox::Ok);
-                    QTimer::singleShot(250, [&] () { if (ui) close(); });
+                    QTimer::singleShot(250, this, [this] { close(); });
                     return;
                 }
                 m_logger->info("{} Decompression successful - starting preview playback of: {}", m_loggingPrefix,
@@ -53,7 +53,7 @@ DlgVideoPreview::DlgVideoPreview(QString mediaFilePath, QWidget *parent) :
             QMessageBox::warning(nullptr, tr("Bad karaoke file"),
                                  tr("Zip file does not contain a valid karaoke track.  CDG or audio file missing or corrupt."),
                                  QMessageBox::Ok);
-            QTimer::singleShot(250, [&] () { if (ui) close(); });
+            QTimer::singleShot(250, this, [this] { close(); });
             return;
         }
     } else if (m_mediaFilename.endsWith(".cdg", Qt::CaseInsensitive)) {
@@ -61,21 +61,21 @@ DlgVideoPreview::DlgVideoPreview(QString mediaFilePath, QWidget *parent) :
         if (cdgFile.size() == 0) {
             m_logger->warn("{} Bad karaoke file - CDG file contains no data - {}", m_loggingPrefix, m_mediaFilename);
             QMessageBox::warning(nullptr, tr("Bad karaoke file"), tr("CDG file contains no data"), QMessageBox::Ok);
-            QTimer::singleShot(250, [&] () { if (ui) close(); });
+            QTimer::singleShot(250, this, [this] { close(); });
             return;
         }
         QString audioFilePath = findMatchingAudioFile(m_mediaFilename);
         if (audioFilePath == "") {
             m_logger->warn("{} Bad karaoke file - No matching audio file found - {}", m_loggingPrefix, m_mediaFilename);
             QMessageBox::warning(nullptr, tr("Bad karaoke file"), tr("Audio file missing."), QMessageBox::Ok);
-            QTimer::singleShot(250, [&] () { if (ui) close(); });
+            QTimer::singleShot(250, this, [this] { close(); });
             return;
         }
         QFile audioFile(audioFilePath);
         if (audioFile.size() == 0) {
             m_logger->warn("{} Bad karaoke file - Audio file contains no data - {}", m_loggingPrefix, m_mediaFilename);
             QMessageBox::warning(nullptr, tr("Bad karaoke file"), tr("Audio file contains no data"), QMessageBox::Ok);
-            QTimer::singleShot(250, [&] () { if (ui) close(); });
+            QTimer::singleShot(250, this, [this] { close(); });
             return;
         }
         m_logger->info("{} Starting preview playback of media file: {}", m_loggingPrefix, m_mediaFilename);
@@ -108,11 +108,6 @@ void DlgVideoPreview::playVideo(const QString &filename) {
 
 void DlgVideoPreview::setPlaybackTimeLimit(int playSecs) {
     if (playSecs != 0)
-        QTimer::singleShot(playSecs * 1000, [&]() {
-            if (ui)
-                close();
-            else
-                m_logger->warn("{} UI object already destroyed when time limit expired", m_loggingPrefix);
-        });
+        QTimer::singleShot(playSecs * 1000, this, [this] { close(); });
 }
 

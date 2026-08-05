@@ -14,6 +14,8 @@ CdgImageFrame::CdgImageFrame()
     m_bytesPerPixel = m_image.pixelFormat().bitsPerPixel() / 8;
     m_borderLRBytes = m_bytesPerPixel * 6;
     m_borderRBytesOffset = 294 * m_bytesPerPixel;
+    m_scrollScratch.resize(m_image.bytesPerLine() * 12);
+    m_horizontalScrollScratch.resize(m_borderLRBytes);
     m_image.setColorTable(palette);
     m_image.fill(0);
 }
@@ -177,13 +179,14 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
         for (auto i=0; i < 216; i++)
         {
             auto bits = m_image.scanLine(i);
-            unsigned char* tmpPixels[6];
-            memcpy(tmpPixels, bits, 6);
-            memcpy(bits, bits + (6 * m_bytesPerPixel), 294 * m_bytesPerPixel);
+            memcpy(m_horizontalScrollScratch.data(), bits, static_cast<size_t>(m_borderLRBytes));
+            memmove(bits, bits + (6 * m_bytesPerPixel), 294 * m_bytesPerPixel);
             if (type == cdg::ScrollCopy)
-                memcpy(bits + m_borderRBytesOffset, tmpPixels, 6);
+                memcpy(bits + m_borderRBytesOffset, m_horizontalScrollScratch.constData(),
+                       static_cast<size_t>(m_borderLRBytes));
             else
-                memset(bits + m_borderLRBytes, scrollCmdData.color, 6);
+                memset(bits + m_borderRBytesOffset, scrollCmdData.color,
+                       static_cast<size_t>(m_borderLRBytes));
         }
     }
     if (scrollCmdData.hSCmd == 1)
@@ -192,24 +195,24 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
         for (auto i=0; i < 216; i++)
         {
             auto bits = m_image.scanLine(i);
-            unsigned char* tmpPixels[6];
-            memcpy(tmpPixels, bits + (m_bytesPerPixel * 294), 6);
-            memcpy(bits + (6 * m_bytesPerPixel), bits , 294 * m_bytesPerPixel);
+            memcpy(m_horizontalScrollScratch.data(), bits + m_borderRBytesOffset,
+                   static_cast<size_t>(m_borderLRBytes));
+            memmove(bits + (6 * m_bytesPerPixel), bits, 294 * m_bytesPerPixel);
             if (type == cdg::ScrollCopy)
-                memcpy(bits, tmpPixels, 6);
+                memcpy(bits, m_horizontalScrollScratch.constData(), static_cast<size_t>(m_borderLRBytes));
             else
-                memset(bits, scrollCmdData.color, 6);
+                memset(bits, scrollCmdData.color, static_cast<size_t>(m_borderLRBytes));
         }
     }
     if (scrollCmdData.vSCmd == 2)
     {
         // scroll up 12px
         auto bits = m_image.bits();
-        unsigned char* tmpLines[3600]; // m_image.bytesPerLine() * 12
-        memcpy(tmpLines, bits, m_image.bytesPerLine() * 12);
-        memcpy(bits, bits + m_image.bytesPerLine() * 12, 204 * m_image.bytesPerLine());
+        memcpy(m_scrollScratch.data(), bits, static_cast<size_t>(m_scrollScratch.size()));
+        memmove(bits, bits + m_image.bytesPerLine() * 12, 204 * m_image.bytesPerLine());
         if (type == cdg::ScrollCopy)
-            memcpy(bits + (204 * m_image.bytesPerLine()), tmpLines, m_image.bytesPerLine() * 12);
+            memcpy(bits + (204 * m_image.bytesPerLine()), m_scrollScratch.constData(),
+                   static_cast<size_t>(m_scrollScratch.size()));
         else
             memset(bits + (204 * m_image.bytesPerLine()), scrollCmdData.color, m_image.bytesPerLine() * 12);
     }
@@ -217,11 +220,11 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
     {
         // scroll down 12px
         auto bits = m_image.bits();
-        unsigned char* tmpLines[3600];
-        memcpy(tmpLines, bits + (m_image.bytesPerLine() * 204), m_image.bytesPerLine() * 12);
-        memcpy(bits + (m_image.bytesPerLine() * 12), bits, 204 * m_image.bytesPerLine());
+        memcpy(m_scrollScratch.data(), bits + (m_image.bytesPerLine() * 204),
+               static_cast<size_t>(m_scrollScratch.size()));
+        memmove(bits + (m_image.bytesPerLine() * 12), bits, 204 * m_image.bytesPerLine());
         if (type == cdg::ScrollCopy)
-            memcpy(bits, tmpLines, m_image.bytesPerLine() * 12);
+            memcpy(bits, m_scrollScratch.constData(), static_cast<size_t>(m_scrollScratch.size()));
         else
             memset(bits, scrollCmdData.color, m_image.bytesPerLine() * 12);
     }

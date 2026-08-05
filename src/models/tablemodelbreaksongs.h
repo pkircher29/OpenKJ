@@ -15,7 +15,7 @@ struct BreakSong {
     QString title;
     QString path;
     QString filename;
-    int duration;
+    int duration{0};
     std::string searchString;
 
 };

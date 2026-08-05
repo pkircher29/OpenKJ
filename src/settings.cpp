@@ -220,19 +220,26 @@ bool Settings::passIsSet()
 
 void Settings::setCC(QString ccn, QString month, QString year, QString ccv, QString passwd)
 {
-    QString cc = ccn + "," + month + "," + year + "," + ccv;
-    SimpleCrypt simpleCrypt(this->hash(passwd));
-    settings->setValue("cc", simpleCrypt.encryptToString(cc));
+    Q_UNUSED(ccn)
+    Q_UNUSED(month)
+    Q_UNUSED(year)
+    Q_UNUSED(ccv)
+    Q_UNUSED(passwd)
+    clearCC();
 }
 
 void Settings::setSaveCC(bool save)
 {
-    settings->setValue("saveCC", save);
+    Q_UNUSED(save)
+    settings->remove("saveCC");
+    clearCC();
 }
 
 bool Settings::saveCC()
 {
-    return settings->value("saveCC", false).toBool();
+    settings->remove("saveCC");
+    clearCC();
+    return false;
 }
 
 void Settings::clearCC()
@@ -279,46 +286,26 @@ bool Settings::dbDoubleClickAddsSong()
 
 QString Settings::getCCN(const QString &password)
 {
-    SimpleCrypt simpleCrypt(this->hash(password));
-    QString encrypted = settings->value("cc", QString()).toString();
-    if (encrypted == QString())
-        return QString();
-    QString cc = simpleCrypt.decryptToString(encrypted);
-    QStringList parts = cc.split(",");
-    return parts.at(0);
+    Q_UNUSED(password)
+    return QString();
 }
 
 QString Settings::getCCM(const QString &password)
 {
-    SimpleCrypt simpleCrypt(this->hash(password));
-    QString encrypted = settings->value("cc", QString()).toString();
-    if (encrypted == QString())
-        return QString();
-    QString cc = simpleCrypt.decryptToString(encrypted);
-    QStringList parts = cc.split(",");
-    return parts.at(1);
+    Q_UNUSED(password)
+    return QString();
 }
 
 QString Settings::getCCY(const QString &password)
 {
-    SimpleCrypt simpleCrypt(this->hash(password));
-    QString encrypted = settings->value("cc", QString()).toString();
-    if (encrypted == QString())
-        return QString();
-    QString cc = simpleCrypt.decryptToString(encrypted);
-    QStringList parts = cc.split(",");
-    return parts.at(2);
+    Q_UNUSED(password)
+    return QString();
 }
 
 QString Settings::getCCV(const QString &password)
 {
-    SimpleCrypt simpleCrypt(this->hash(password));
-    QString encrypted = settings->value("cc", QString()).toString();
-    if (encrypted == QString())
-        return QString();
-    QString cc = simpleCrypt.decryptToString(encrypted);
-    QStringList parts = cc.split(",");
-    return parts.at(3);
+    Q_UNUSED(password)
+    return QString();
 }
 
 void Settings::setKaroakeDotNetUser(const QString &username, const QString &password)
@@ -367,8 +354,12 @@ Settings::Settings(QObject *parent) :
     {
         khDir.mkpath(khDir.absolutePath());
     }
-    settings = new QSettings(khDir.absolutePath() + QDir::separator() + "openkj.ini", QSettings::IniFormat);
+    settings = new QSettings(khDir.absolutePath() + QDir::separator() + "openkj.ini", QSettings::IniFormat, this);
 #endif
+    // OpenKJ 3.0 intentionally retires legacy card/CVV persistence. SimpleCrypt
+    // does not provide storage appropriate for payment data.
+    settings->remove("cc");
+    settings->remove("saveCC");
 }
 
 bool Settings::cdgWindowFullscreen()

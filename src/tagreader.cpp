@@ -6,12 +6,19 @@ TagReader::TagReader(QObject *parent) : QObject(parent)
 {
     m_logger = spdlog::get("logger");
     m_duration = 0;
-    discoverer = gst_discoverer_new(2 * GST_SECOND, nullptr);
+    GError *error = nullptr;
+    discoverer = gst_discoverer_new(2 * GST_SECOND, &error);
+    if (error)
+    {
+        m_logger->error("{} Unable to create GStreamer discoverer: {}", m_loggingPrefix, error->message);
+        g_error_free(error);
+    }
 }
 
 TagReader::~TagReader()
 {
-    gst_object_unref(discoverer);
+    if (discoverer)
+        gst_object_unref(discoverer);
 }
 
 QString TagReader::getArtist()
@@ -41,6 +48,11 @@ unsigned int TagReader::getDuration() const
 
 void TagReader::setMedia(const QString& path)
 {
+    m_artist.clear();
+    m_title.clear();
+    m_album.clear();
+    m_track.clear();
+    m_duration = 0;
     m_logger->info("{} Getting tags for: {}", m_loggingPrefix, path);
     if ((path.endsWith(".mp3", Qt::CaseInsensitive)) || (path.endsWith(".ogg", Qt::CaseInsensitive)) || path.endsWith(".mp4", Qt::CaseInsensitive) || path.endsWith(".m4v", Qt::CaseInsensitive))
     {
@@ -49,6 +61,11 @@ void TagReader::setMedia(const QString& path)
         return;
     }
     m_logger->info("{} Using GStreamer to get tags", m_loggingPrefix);
+    if (!discoverer)
+    {
+        m_logger->error("{} Cannot read media tags because the GStreamer discoverer is unavailable", m_loggingPrefix);
+        return;
+    }
     QString uri;
 #ifdef Q_OS_WIN
     uri = "file:///" + path;
@@ -70,16 +87,19 @@ void TagReader::setMedia(const QString& path)
         const GstTagList *tags = gst_discoverer_info_get_tags(discovererInfo);
         if (GST_IS_TAG_LIST(tags))
         {
-            gchar *tagVal;
+            gchar *tagVal = nullptr;
             if (gst_tag_list_get_string(tags,"artist",&tagVal))
             {
                 m_artist = tagVal;
                 m_logger->info("{} Got artist tag: {}", m_loggingPrefix, m_artist);
+                g_free(tagVal);
+                tagVal = nullptr;
             }
             if (gst_tag_list_get_string(tags,"title",&tagVal))
             {
                 m_title = tagVal;
                 m_logger->info("{} Got title tag: {}", m_loggingPrefix, m_title);
+                g_free(tagVal);
             }
         }
         else
@@ -94,11 +114,12 @@ void TagReader::setMedia(const QString& path)
 void TagReader::taglibTags(const QString& path)
 {
     TagLib::FileRef f(path.toLocal8Bit().data());
-    if (!f.isNull())
+    if (!f.isNull() && f.tag())
     {
         m_artist = f.tag()->artist().toCString(true);
         m_title = f.tag()->title().toCString(true);
-        m_duration = f.audioProperties()->length() * 1000;
+        if (f.audioProperties())
+            m_duration = f.audioProperties()->length() * 1000;
         m_album = f.tag()->album().toCString(true);
         auto track = f.tag()->track();
         if (track == 0)

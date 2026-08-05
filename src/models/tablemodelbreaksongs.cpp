@@ -64,7 +64,7 @@ QVariant TableModelBreakSongs::headerData(int section, Qt::Orientation orientati
 
 int TableModelBreakSongs::rowCount([[maybe_unused]]const QModelIndex &parent) const
 {
-    return m_filteredSongs.size();
+    return static_cast<int>(m_filteredSongs.size());
 }
 
 int TableModelBreakSongs::columnCount([[maybe_unused]]const QModelIndex &parent) const

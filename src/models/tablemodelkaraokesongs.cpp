@@ -31,6 +31,7 @@ QVariant TableModelKaraokeSongs::headerData(int section, Qt::Orientation orienta
         case Qt::SizeHintRole:
             if (orientation == Qt::Horizontal)
                 return getColumnSizeHint(section);
+            break;
         default:
             return {};
     }
@@ -213,14 +214,6 @@ void TableModelKaraokeSongs::search(const QString &searchString) {
 void TableModelKaraokeSongs::searchExec() {
     searchTimer.stop();
     emit layoutAboutToBeChanged();
-    std::vector<std::string> searchTerms;
-    std::string s = m_lastSearch.toLower().toStdString();
-    std::string::size_type prev_pos = 0, pos = 0;
-    while ((pos = s.find(' ', pos)) != std::string::npos) {
-        searchTerms.emplace_back(s.substr(prev_pos, pos - prev_pos));
-        prev_pos = ++pos;
-    }
-    searchTerms.emplace_back(s.substr(prev_pos, pos - prev_pos));
     m_filteredSongs.clear();
     m_filteredSongs.reserve(m_allSongs.size());
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
@@ -240,11 +233,13 @@ void TableModelKaraokeSongs::searchExec() {
                 break;
             }
             case TableModelKaraokeSongs::SEARCH_TYPE_ARTIST: {
-                haystack = song->artistL.replace('&', " and ");
+                haystack = song->artistL;
+                haystack.replace('&', " and ");
                 break;
             }
             case TableModelKaraokeSongs::SEARCH_TYPE_TITLE: {
-                haystack = song->titleL.replace('&', " and ");
+                haystack = song->titleL;
+                haystack.replace('&', " and ");
                 break;
             }
         }
@@ -254,13 +249,12 @@ void TableModelKaraokeSongs::searchExec() {
         for (const auto &needle : needles) {
             if (!haystack.contains(needle)) {
                 match = false;
-                continue;
+                break;
             }
         }
         if (match)
             m_filteredSongs.emplace_back(song);
     }
-    m_filteredSongs.shrink_to_fit();
     emit layoutChanged();
 }
 

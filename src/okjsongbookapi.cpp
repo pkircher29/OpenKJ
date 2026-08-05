@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QFile>
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QMessageBox>
 #include <QPushButton>
 #include "idledetect.h"
@@ -161,100 +162,98 @@ void OKJSongbookAPI::clearRequests()
 void OKJSongbookAPI::updateSongDb()
 {
     cancelUpdate = false;
+    updateFailed = false;
     updateInProgress = true;
     emit remoteSongDbUpdateStart();
-    int songsPerDoc = 1000;
+    const int songsPerDoc = 1000;
     QList<QJsonDocument> jsonDocs;
     QSqlQuery query;
-    int numEntries = 0;
-    if (cancelUpdate)
+    auto finishUpdate = [this]() {
+        updateInProgress = false;
+        emit remoteSongDbUpdateDone();
+    };
+    auto makeDocument = [this](const QJsonArray &songs) {
+        QJsonObject object;
+        object.insert("api_key", m_settings.requestServerApiKey());
+        object.insert("command", "addSongs");
+        object.insert("songs", songs);
+        object.insert("system_id", m_settings.systemId());
+        return QJsonDocument(object);
+    };
+
+    if (!query.exec("SELECT DISTINCT artist,title FROM dbsongs WHERE discid != '!!DROPPED!!' AND discid != '!!BAD!!' ORDER BY artist ASC, title ASC")) {
+        m_logger->error("{} Failed to enumerate songs for remote update: {}", m_loggingPrefix,
+                        query.lastError().text());
+        updateFailed = true;
+        finishUpdate();
         return;
-    if (query.exec("SELECT COUNT(DISTINCT artist||title) FROM dbsongs WHERE discid != '!!DROPPED!!' AND discid != '!!BAD!!'"))
-    {
-        if (query.next())
-            numEntries = query.value(0).toInt();
     }
-    if (cancelUpdate)
-        return;
-    if (query.exec("SELECT DISTINCT artist,title FROM dbsongs WHERE discid != '!!DROPPED!!' AND discid != '!!BAD!!' ORDER BY artist ASC, title ASC"))
-    {
-        if (cancelUpdate)
+
+    QJsonArray songsArray;
+    while (query.next()) {
+        if (cancelUpdate) {
+            finishUpdate();
             return;
-        bool done = false;
-        int numDocs = numEntries / songsPerDoc;
-        if (numEntries % songsPerDoc > 0)
-            numDocs++;
-        emit remoteSongDbUpdateNumDocs(numDocs);
-        int docs = 0;
-        while (!done)
-        {
-            if (cancelUpdate)
-                return;
-            QApplication::processEvents();
-            QJsonArray songsArray;
-            int count = 0;
-            while ((query.next()) && (count < songsPerDoc))
-            {
-                if (cancelUpdate)
-                    return;
-                QJsonObject songObject;
-                songObject.insert("artist", query.value(0).toString());
-                songObject.insert("title", query.value(1).toString());
-                songsArray.insert(0, songObject);
-                QApplication::processEvents();
-                count++;
-            }
-            docs++;
-            if (count < songsPerDoc)
-                done = true;
-            QJsonObject mainObject;
-            mainObject.insert("api_key", m_settings.requestServerApiKey());
-            mainObject.insert("command","addSongs");
-            mainObject.insert("songs", songsArray);
-            mainObject.insert("system_id", m_settings.systemId());
-            QJsonDocument jsonDocument;
-            jsonDocument.setObject(mainObject);
-            jsonDocs.append(jsonDocument);
         }
-        QUrl url(m_settings.requestServerUrl());
-        QJsonObject mainObject;
-        mainObject.insert("api_key", m_settings.requestServerApiKey());
-        mainObject.insert("command","clearDatabase");
-        mainObject.insert("system_id", m_settings.systemId());
-        QJsonDocument jsonDocument;
-        jsonDocument.setObject(mainObject);
+        QJsonObject songObject;
+        songObject.insert("artist", query.value(0).toString());
+        songObject.insert("title", query.value(1).toString());
+        songsArray.append(songObject);
+        if (songsArray.size() == songsPerDoc) {
+            jsonDocs.append(makeDocument(songsArray));
+            songsArray = QJsonArray();
+        }
+        QApplication::processEvents();
+    }
+    if (!songsArray.isEmpty())
+        jsonDocs.append(makeDocument(songsArray));
+
+    emit remoteSongDbUpdateNumDocs(jsonDocs.size());
+
+    QNetworkAccessManager networkManager;
+    const QUrl url(m_settings.requestServerUrl());
+    auto postDocument = [&](const QJsonDocument &document) {
         QNetworkRequest request(url);
-        if (cancelUpdate)
-            return;
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-        QNetworkReply *reply = manager->post(request, jsonDocument.toJson());
-        while (!reply->isFinished())
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+        request.setTransferTimeout(30000);
+#endif
+        QNetworkReply *reply = networkManager.post(request, document.toJson());
+        while (!reply->isFinished()) {
             QApplication::processEvents();
-        m_logger->trace("{} Got reply: {}", m_loggingPrefix, reply->readAll().toStdString());
-        for (int i=0; i < jsonDocs.size(); i++)
-        {
             if (cancelUpdate)
-                return;
-            QApplication::processEvents();
-            QNetworkRequest request(url);
-            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-            QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-            QNetworkReply *reply = manager->post(request, jsonDocs.at(i).toJson());
-            while (!reply->isFinished()){
-                if (cancelUpdate)
-                    return;
-                QApplication::processEvents();
-            }
-            if (cancelUpdate)
-                return;
-            emit remoteSongDbUpdateProgress(i + 1);
+                reply->abort();
         }
-    }
-    if (cancelUpdate)
+        const QByteArray response = reply->readAll();
+        const bool success = reply->error() == QNetworkReply::NoError && !cancelUpdate;
+        if (!success && !cancelUpdate)
+            m_logger->error("{} Remote song database update failed: {}", m_loggingPrefix,
+                            reply->errorString());
+        else
+            m_logger->trace("{} Got reply: {}", m_loggingPrefix, response.toStdString());
+        delete reply;
+        return success;
+    };
+
+    QJsonObject clearObject;
+    clearObject.insert("api_key", m_settings.requestServerApiKey());
+    clearObject.insert("command", "clearDatabase");
+    clearObject.insert("system_id", m_settings.systemId());
+    if (!postDocument(QJsonDocument(clearObject))) {
+        updateFailed = !cancelUpdate;
+        finishUpdate();
         return;
-    updateInProgress = false;
-    emit remoteSongDbUpdateDone();
+    }
+
+    for (int i = 0; i < jsonDocs.size(); ++i) {
+        if (!postDocument(jsonDocs.at(i))) {
+            updateFailed = !cancelUpdate;
+            finishUpdate();
+            return;
+        }
+        emit remoteSongDbUpdateProgress(i + 1);
+    }
+    finishUpdate();
 }
 
 bool OKJSongbookAPI::test()
@@ -276,6 +275,7 @@ bool OKJSongbookAPI::test()
     {
         m_logger->error("{} Network error: {}", m_loggingPrefix, reply->errorString());
         emit testFailed(reply->errorString());
+        delete reply;
         return false;
     }
     QByteArray data = reply->readAll();
@@ -349,6 +349,7 @@ void OKJSongbookAPI::onTestSslErrors(QNetworkReply *reply, QList<QSslError> erro
 
 void OKJSongbookAPI::onNetworkReply(QNetworkReply *reply)
 {
+    reply->deleteLater();
     if (m_settings.requestServerIgnoreCertErrors())
         reply->ignoreSslErrors();
     if (reply->error() != QNetworkReply::NoError)
@@ -574,6 +575,8 @@ bool OkjsRequest::operator ==(const OkjsRequest& r) const
     if (r.title != title)
         return false;
     if (r.time != time)
+        return false;
+    if (r.key != key)
         return false;
     if (r.singer != singer)
         return false;

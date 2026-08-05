@@ -159,10 +159,7 @@ MediaBackend::~MediaBackend()
     gst_caps_unref(m_audioCapsStereo);
     gst_object_unref(m_pipeline);
     gst_object_unref(m_decoder);
-    // these still have 2 refs each for some reason
     gst_object_unref(m_audioBin);
-    gst_object_unref(m_audioBin);
-    gst_object_unref(m_videoBin);
     gst_object_unref(m_videoBin);
     delete m_cdgSrc;
     for (auto &device : m_audioOutputDevices)
@@ -338,6 +335,7 @@ void MediaBackend::patchPipelineSinks()
                 gst_element_unlink(currentSrc, m_audioBin);
                 gst_bin_remove(m_pipelineAsBin, m_audioBin);
                 gst_element_set_state(m_audioBin, GST_STATE_NULL);
+                gst_object_unref(currentSrc);
             }
         }
     }
@@ -364,6 +362,7 @@ void MediaBackend::patchPipelineSinks()
                 gst_element_unlink(currentSrc, m_videoBin);
                 gst_bin_remove(m_pipelineAsBin, m_videoBin);
                 gst_element_set_state(m_videoBin, GST_STATE_NULL);
+                gst_object_unref(currentSrc);
                 emit hasActiveVideoChanged(false);
             }
         }
@@ -518,22 +517,25 @@ void MediaBackend::timerSlow_timeout()
     }
 
     // Check if playback is hung (playing but no movement since 1 second ago) for some reason
-    static int hungCycles{0};
     if (state() == PlayingState)
     {
         if (m_positionWatchdogLastPos == currPos && m_positionWatchdogLastPos > 10)
         {
-            hungCycles++;
-            m_logger->warn("{} Playback appears to be hung!  No position change for {} seconds!", m_loggingPrefix, hungCycles);
-            if (hungCycles >= 5)
+            ++m_positionWatchdogHungCycles;
+            m_logger->warn("{} Playback appears to be hung!  No position change for {} seconds!", m_loggingPrefix, m_positionWatchdogHungCycles);
+            if (m_positionWatchdogHungCycles >= 5)
             {
-                m_logger->warn("{} Playback has been hung for {} seconds, giving up!", m_loggingPrefix, hungCycles);
+                m_logger->warn("{} Playback has been hung for {} seconds, giving up!", m_loggingPrefix, m_positionWatchdogHungCycles);
                 emit stateChanged(EndOfMediaState);
-                hungCycles = 0;
+                m_positionWatchdogHungCycles = 0;
             }
         }
+        else
+            m_positionWatchdogHungCycles = 0;
         m_positionWatchdogLastPos = currPos;
     }
+    else
+        m_positionWatchdogHungCycles = 0;
 }
 
 void MediaBackend::setVideoOffset(const int offsetMs) {
@@ -678,6 +680,7 @@ void MediaBackend::gstBusFunc(GstMessage *message)
         }
         case GST_MESSAGE_STREAM_START:
             m_logger->debug("{} GStreamer reported stream started", m_loggingPrefix);
+            [[fallthrough]];
         case GST_MESSAGE_NEED_CONTEXT:
         case GST_MESSAGE_TAG:
         case GST_MESSAGE_STREAM_STATUS:
@@ -1075,6 +1078,10 @@ void MediaBackend::setDownmix(const bool &enabled)
 
 void MediaBackend::setTempo(const int &percent)
 {
+    if (percent <= 0) {
+        m_logger->warn("{} Ignoring invalid playback tempo: {}%", m_loggingPrefix, percent);
+        return;
+    }
     m_playbackRate = percent / 100.0;
     optimize_scaleTempo_for_rate(m_scaleTempo, m_playbackRate);
 
@@ -1094,8 +1101,11 @@ void MediaBackend::setTempo(const int &percent)
     }
 
     // Change rate by doing a flushing seek to ~current position
-    gint64 curpos;
-    gst_element_query_position (m_pipeline, GST_FORMAT_TIME, &curpos);
+    gint64 curpos{0};
+    if (!gst_element_query_position(m_pipeline, GST_FORMAT_TIME, &curpos)) {
+        m_logger->warn("{} Could not query playback position while changing tempo", m_loggingPrefix);
+        return;
+    }
     gst_element_send_event(m_pipeline, gst_event_new_seek(m_playbackRate, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE), GST_SEEK_TYPE_SET, curpos, GST_SEEK_TYPE_NONE, 0));
 }
 
@@ -1256,6 +1266,10 @@ void MediaBackend::setEqBypass(const bool &bypass)
 
 void MediaBackend::setEqLevel(const int &band, const int &level)
 {
+    if (band < 0 || band >= static_cast<int>(m_eqLevels.size())) {
+        m_logger->warn("{} Ignoring invalid equalizer band index: {}", m_loggingPrefix, band);
+        return;
+    }
     if (!m_bypass)
         g_object_set(m_equalizer, QString("band%1").arg(band).toLocal8Bit(), (double)level, nullptr);
     m_eqLevels[band] = level;

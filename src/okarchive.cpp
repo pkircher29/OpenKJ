@@ -20,7 +20,10 @@
 
 
 #include "okarchive.h"
+#include "archivepathutil.h"
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QBuffer>
 #include <QTemporaryDir>
 #ifdef Q_OS_WIN
@@ -30,10 +33,12 @@
 #include <unistd.h>
 #endif
 
+
 QString infoZipPath;
 
 OkArchive::OkArchive(QString ArchiveFile, QObject *parent) : QObject(parent)
 {
+    m_logger = spdlog::get("logger");
     m_logger->info("{} Opening archive: {}", m_loggingPrefix, ArchiveFile);
     process = new QProcess();
     archiveFile = ArchiveFile;
@@ -253,34 +258,29 @@ bool OkArchive::findEntries()
     if (m_audioFound && m_cdgFound)
         return true;
     getZipContents();
-    for (int i=0; i < m_entries.size(); i++)
-    {
-
-        QString fileName = m_entries.at(i).fileName;
-        if (fileName.endsWith(".cdg",Qt::CaseInsensitive))
-        {
-            cdgFileName = fileName;
-            m_cdgSize = m_entries.at(i).fileSize;
-            m_cdgFound = true;
-        }
-        else
-        {
-            for (int e=0; e < audioExtensions.size(); e++)
-            {
-                if (fileName.endsWith(audioExtensions.at(e), Qt::CaseInsensitive))
-                {
-                    audioFileName = fileName;
-                    audioExt = audioExtensions.at(e);
-                    m_audioSize = m_entries.at(i).fileSize;
-                    m_audioFound = true;
+    for (const auto &cdgEntry : m_entries) {
+        if (!cdgEntry.fileName.endsWith(".cdg", Qt::CaseInsensitive))
+            continue;
+        const QString cdgStem = okj::archiveEntryStem(cdgEntry.fileName);
+        for (const auto &audioEntry : m_entries) {
+            QString matchedExtension;
+            for (const auto &extension : audioExtensions) {
+                if (audioEntry.fileName.endsWith(extension, Qt::CaseInsensitive)) {
+                    matchedExtension = extension;
+                    break;
                 }
             }
-        }
-        if (m_audioFound && m_cdgFound)
-        {
+            if (matchedExtension.isEmpty() || okj::archiveEntryStem(audioEntry.fileName) != cdgStem)
+                continue;
+            cdgFileName = cdgEntry.fileName;
+            m_cdgSize = cdgEntry.fileSize;
+            m_cdgFound = true;
+            audioFileName = audioEntry.fileName;
+            audioExt = matchedExtension;
+            m_audioSize = audioEntry.fileSize;
+            m_audioFound = true;
             return true;
         }
-
     }
     return false;
 }

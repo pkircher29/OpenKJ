@@ -1,6 +1,7 @@
 #define SQL(...) #__VA_ARGS__
 #include "karaokefilepatternresolver.h"
 #include <QSqlQuery>
+#include <QDir>
 
 KaraokeFilePatternResolver::KaraokeFilePatternResolver()
 {
@@ -52,7 +53,9 @@ const KaraokeFilePatternResolver::KaraokeFilePattern& KaraokeFilePatternResolver
     auto it =  m_path_pattern_map.cend();
     while (it != m_path_pattern_map.cbegin()) {
         --it;
-        if (filename.startsWith(it.key())) {
+        const QString sourcePath = QDir::fromNativeSeparators(QDir::cleanPath(it.key()));
+        const QString candidatePath = QDir::fromNativeSeparators(QDir::cleanPath(filename));
+        if (candidatePath == sourcePath || candidatePath.startsWith(sourcePath + '/')) {
             return it.value();
         }
     }

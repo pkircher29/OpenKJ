@@ -42,7 +42,7 @@ namespace okj {
         QString filename;
         QString path;
         QString searchString;
-        int plays;
+        int plays{0};
         QDateTime lastPlay;
         bool bad{false};
         bool dropped{false};

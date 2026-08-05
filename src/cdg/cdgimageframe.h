@@ -2,6 +2,7 @@
 #define CDGIMAGEFRAME_H
 
 #include <QImage>
+#include <QByteArray>
 #include "libCDG.h"
 
 class CdgImageFrame
@@ -19,6 +20,8 @@ public:
 private:
 
     QImage m_image;
+    QByteArray m_scrollScratch;
+    QByteArray m_horizontalScrollScratch;
 
     int m_bytesPerPixel;
     int m_borderLRBytes;

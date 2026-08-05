@@ -20,7 +20,10 @@ DlgSongShopPurchase::DlgSongShopPurchase(std::shared_ptr<SongShop> songShop, QWi
     ui->lineEditCCV->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
     knLoginTest = false;
     ui->cbxSaveAccount->setChecked(m_settings.saveKNAccount());
-    ui->cbxSaveCard->setChecked(m_settings.saveCC());
+    m_settings.setSaveCC(false);
+    ui->cbxSaveCard->setChecked(false);
+    ui->cbxSaveCard->setEnabled(false);
+    ui->cbxSaveCard->setToolTip("OpenKJ 3.0 does not store payment-card details. Enter them for each purchase.");
     authenticated = false;
     setupDone = true;
     connect(shop.get(), &SongShop::paymentProcessingFailed, this, &DlgSongShopPurchase::paymentProcessingFailed);
@@ -34,6 +37,7 @@ DlgSongShopPurchase::DlgSongShopPurchase(std::shared_ptr<SongShop> songShop, QWi
 
 DlgSongShopPurchase::~DlgSongShopPurchase()
 {
+    delete msgBoxInfo;
     delete ui;
 }
 
@@ -78,6 +82,7 @@ void DlgSongShopPurchase::doAuth()
             }
             else
             {
+                setupDone = true;
                 return;
             }
         }

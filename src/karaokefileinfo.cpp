@@ -3,6 +3,7 @@
 #include <QTemporaryDir>
 #include "tagreader.h"
 #include "okarchive.h"
+#include "okjutil.h"
 #include <QSqlQuery>
 
 KaraokeFileInfo::KaraokeFileInfo(QObject *parent, std::shared_ptr<KaraokeFilePatternResolver> patternResolver) : QObject(parent), m_patternResolver(patternResolver) {
@@ -20,17 +21,7 @@ void KaraokeFileInfo::readTags()
 
     if (m_filename.endsWith(".cdg", Qt::CaseInsensitive))
     {
-        QString baseFn = m_filename;
-        QString mediaFile;
-        baseFn.chop(3);
-        if (QFile::exists(baseFn + "mp3"))
-            mediaFile = baseFn + "mp3";
-        else if (QFile::exists(baseFn + "Mp3"))
-            mediaFile = baseFn + "Mp3";
-        else if (QFile::exists(baseFn + "MP3"))
-            mediaFile = baseFn + "MP3";
-        else if (QFile::exists(baseFn + "mP3"))
-            mediaFile = baseFn + "mP3";
+        const QString mediaFile = findMatchingAudioFile(m_filename);
         tagReader->setMedia(mediaFile);
         tagArtist = tagReader->getArtist();
         tagTitle = tagReader->getTitle();
