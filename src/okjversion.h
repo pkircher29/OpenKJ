@@ -1,10 +1,10 @@
 #ifndef OKJVERSION_H
 #define OKJVERSION_H
 
-#define OKJ_VERSION_MAJOR 2
-#define OKJ_VERSION_MINOR 1
-#define OKJ_VERSION_BUILD 39
-#define OKJ_VERSION_STRING "2.1.39"
-#define OKJ_VERSION_BRANCH "unstable"
+#define OKJ_VERSION_MAJOR 3
+#define OKJ_VERSION_MINOR 0
+#define OKJ_VERSION_BUILD 0
+#define OKJ_VERSION_STRING "3.0.0"
+#define OKJ_VERSION_BRANCH "release"
 
 #endif //OKJVERSION_H

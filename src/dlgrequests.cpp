@@ -428,10 +428,13 @@ void DlgRequests::on_pushButtonUpdateDb_clicked() {
         songbookApi.updateSongDb();
         if (songbookApi.updateWasCancelled())
             qInfo() << "Songbook DB update cancelled by user";
-        else {
+        else if (songbookApi.updateWasSuccessful()) {
             QMessageBox msgBox;
             msgBox.setText(tr("Remote database update completed!"));
             msgBox.exec();
+        } else {
+            QMessageBox::critical(this, tr("Remote Database Update Failed"),
+                                  tr("The remote song database update did not complete. The remote database may be incomplete; check the application log and retry."));
         }
         qInfo() << "Closing progress dialog for remote db update";
         progressDialog->close();

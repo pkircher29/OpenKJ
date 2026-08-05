@@ -6,7 +6,8 @@ bool gsthlp_is_sink_linked(GstElement *element)
 {
     GstPad *pad = gst_element_get_static_pad(element, "sink");
     bool result = pad && gst_pad_is_linked(pad);
-    gst_object_unref(pad);
+    if (pad)
+        gst_object_unref(pad);
     return result;
 }
 
@@ -20,11 +21,10 @@ GstElement* gsthlp_get_peer_element(GstElement *element, const gchar* sinkName)
         if (peer)
         {
             result = gst_pad_get_parent_element(peer);
-            gst_object_unref(result);
+            gst_object_unref(peer);
         }
-        gst_object_unref(peer);
+        gst_object_unref(pad);
     }
-    gst_object_unref(pad);
     return result;
 }
 
@@ -35,10 +35,13 @@ void gsthlp_bin_try_remove(GstBin *bin, std::vector<GstElement *> elements)
         if (el)
         {
             auto name = gst_element_get_name(el);
-            if(el == gst_bin_get_by_name(bin, name))
+            auto existing = gst_bin_get_by_name(bin, name);
+            if(el == existing)
             {
                 gst_bin_remove(bin, el);
             }
+            if (existing)
+                gst_object_unref(existing);
             g_free(name);
         }
     }

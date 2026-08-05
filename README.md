@@ -1,21 +1,21 @@
-[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/OpenKJ/OpenKJ.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/OpenKJ/OpenKJ/context:cpp)
-[![Copr build status](https://copr.fedorainfracloud.org/coprs/openkj/OpenKJ-unstable/package/openkjtools/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/openkj/OpenKJ-unstable/package/openkjtools/)
-[![Windows Build](https://github.com/OpenKJ/OpenKJ/actions/workflows/windows-test.yml/badge.svg)](https://github.com/OpenKJ/OpenKJ/actions/workflows/windows-test.yml)
-[![Test building on macOS](https://github.com/OpenKJ/OpenKJ/actions/workflows/macos-test.yml/badge.svg)](https://github.com/OpenKJ/OpenKJ/actions/workflows/macos-test.yml)
+# OpenKJ 3.0
 
-**Downloads**  
-If you are looking for installers for Windows or macOS, please visit the Downloads section at https://openkj.org
+**A free, community-maintained release of cross-platform open-source karaoke show-hosting software.**
 
-Linux users can grab OpenKJ stable versions from flathub: https://flathub.org/apps/details/org.openkj.OpenKJ
+OpenKJ 3.0 is a reliability, security, and performance maintenance release for KJs who want to keep using OpenKJ. It is not an official replacement for upstream OpenKJ support or hosting; it is a community-maintained alternative with an independently audited codebase and native Windows, Linux, and macOS build targets.
 
-If you would like to install Linux versions of the unstable builds, please refer to the OpenKJ documentation wiki.
+## OpenKJ 3.0 community release
 
-Documentation can be found at https://docs.openkj.org
+- **Free and open source:** the 3.0 bug-fix and maintenance release remains available at no cost.
+- **What changed:** see [RELEASE_NOTES.md](RELEASE_NOTES.md) for the verified reliability, playback, database, Songbook, and legacy-payment-setting fixes.
+- **Announcement and choices:** see [COMMUNITY_ANNOUNCEMENT.md](COMMUNITY_ANNOUNCEMENT.md) for the full community note, including the optional OpenKJ-compatible hosted-service offering and Auto-KJ migration/trial paths.
+- **Downloads:** the verified GitHub Release link will be added here when publication completes. Do not treat an unverified build artifact as a production installer.
 
-If you need help with OpenKJ, you can reach out to support@openkj.org via email.
+OpenKJ remains a useful option for hosts who prefer its workflow. If you want a newer platform, [Auto-KJ](https://auto-kj.com/#pricing) offers a separate optional migration path, including importing OpenKJ singer histories and song databases. There are no forced upgrades.
 
-OpenKJ
-======
+---
+
+## About OpenKJ
 
 Cross-platform open source karaoke show hosting software.
 

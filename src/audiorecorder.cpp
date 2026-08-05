@@ -10,6 +10,9 @@ void AudioRecorder::generateDeviceList() {
     auto moncaps = gst_caps_new_empty_simple("audio/x-raw");
     auto filterId = gst_device_monitor_add_filter(monitor, "Audio/Source", moncaps);
     gst_caps_unref(moncaps);
+    for (auto *device : m_inputDevices)
+        gst_object_unref(device);
+    m_inputDevices.clear();
     m_inputDeviceNames.clear();
     GList *devices, *elem;
     devices = gst_device_monitor_get_devices(monitor);
@@ -102,6 +105,12 @@ void AudioRecorder::processGstMessage() {
             switch (message->type) {
                 case GST_MESSAGE_STATE_CHANGED:
                     break;
+                case GST_MESSAGE_EOS:
+                    if (m_finalizing) {
+                        logger->debug("{} Recorder pipeline finalized", m_loggingPrefix);
+                        completeFinalization();
+                    }
+                    break;
                 case GST_MESSAGE_WARNING:
                 case GST_MESSAGE_ERROR:
                     GError *err;
@@ -114,9 +123,10 @@ void AudioRecorder::processGstMessage() {
                         logger->error("{} [gstreamer] {}", m_loggingPrefix, err->message);
                     }
                     logger->debug("{} [gstreamer] {}", m_loggingPrefix, debug);
-                    gst_message_unref(message);
                     g_error_free(err);
                     g_free(debug);
+                    if (message->type == GST_MESSAGE_ERROR && m_finalizing)
+                        completeFinalization();
                     break;
                 default:
                     logger->debug("{} [gstreamer] Unhandled GStreamer msg received - Element: {} - Type: {} - Name: {}",
@@ -146,17 +156,43 @@ void AudioRecorder::getRecordingSettings() {
 }
 
 void AudioRecorder::record(const QString &filename) {
+    if (m_finalizing) {
+        logger->warn("{} Cannot start a new recording while the previous file is finalizing", m_loggingPrefix);
+        return;
+    }
     getRecordingSettings();
     setInputDevice(m_currentDevice);
     logger->info("{} Recording to file: {}", m_loggingPrefix, filename.toStdString());
     setOutputFile(filename);
-    gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
+    m_recording = gst_element_set_state(m_pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE;
+    if (!m_recording)
+        logger->error("{} Failed to start the recorder pipeline", m_loggingPrefix);
 }
 
 void AudioRecorder::stop() {
     logger->info("{} Stopping recording", m_loggingPrefix);
-    gst_element_set_state(m_pipeline, GST_STATE_NULL);
+    if (!m_recording || m_finalizing)
+        return;
+    m_finalizing = true;
+    if (!gst_element_send_event(m_pipeline, gst_event_new_eos())) {
+        logger->warn("{} Unable to send EOS to the recorder pipeline", m_loggingPrefix);
+        completeFinalization();
+        return;
+    }
+    QTimer::singleShot(2000, this, [this]() {
+        if (m_finalizing) {
+            logger->warn("{} Timed out waiting for the recorder pipeline to finalize", m_loggingPrefix);
+            completeFinalization();
+        }
+    });
+}
 
+void AudioRecorder::completeFinalization()
+{
+    if (m_pipeline)
+        gst_element_set_state(m_pipeline, GST_STATE_NULL);
+    m_recording = false;
+    m_finalizing = false;
 }
 
 void AudioRecorder::pause() {
@@ -185,8 +221,24 @@ AudioRecorder::AudioRecorder(QObject *parent) : QObject(parent) {
 
 AudioRecorder::~AudioRecorder() {
     logger->debug("{} AudioRecorder destructor called", m_loggingPrefix);
-    gst_element_set_state(m_pipeline, GST_STATE_NULL);
+    m_timer.stop();
+    if (m_pipeline && (m_recording || m_finalizing)) {
+        if (!m_finalizing)
+            gst_element_send_event(m_pipeline, gst_event_new_eos());
+        GstMessage *message = gst_bus_timed_pop_filtered(
+            m_bus, 2 * GST_SECOND,
+            static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+        if (message)
+            gst_message_unref(message);
+        else
+            logger->warn("{} Timed out finalizing recorder during shutdown", m_loggingPrefix);
+    }
+    completeFinalization();
+    if (m_bus)
+        gst_object_unref(m_bus);
     g_object_unref(m_pipeline);
+    for (auto *device : m_inputDevices)
+        gst_object_unref(device);
 }
 
 QStringList AudioRecorder::getDeviceList() {
@@ -203,11 +255,7 @@ void AudioRecorder::setOutputFile(const QString &filename) {
     QDir dir;
     std::string outputFilePath;
     dir.mkpath(outputDir);
-#ifdef Q_OS_WIN
-    outputFilePath = outputDir.toStdString() + "/" + filename.toStdString() + "." + m_currentFileExt.toStdString();
-#else
     outputFilePath = outputDir.toStdString() + "/" + filename.toStdString() + m_currentFileExt.toStdString();
-#endif
     logger->info("{} AudioRecorder - Capturing to: {}", m_loggingPrefix, outputFilePath);
     g_object_set(GST_OBJECT(m_fileSink), "location", outputFilePath.c_str(), nullptr);
 }
@@ -226,19 +274,22 @@ void AudioRecorder::setInputDevice(const int inputDeviceId) {
 }
 
 void AudioRecorder::setCurrentCodec(const int value) {
-    static int lastCodec = 1;
-    if (value != lastCodec) {
+    if (value < 0 || value >= m_fileExtensions.size()) {
+        logger->warn("{} Ignoring invalid recorder codec index: {}", m_loggingPrefix, value);
+        return;
+    }
+    if (value != m_currentCodec) {
         // Unlink previous encoder in pipeline
-        if (lastCodec == 0) {
+        if (m_currentCodec == 0) {
             // mp3
             gst_element_unlink(m_audioConvert, m_lameMp3Enc);
             gst_element_unlink(m_lameMp3Enc, m_fileSink);
-        } else if (lastCodec == 1) {
+        } else if (m_currentCodec == 1) {
             //ogg
             gst_element_unlink(m_audioConvert, m_vorbisEnc);
             gst_element_unlink(m_vorbisEnc, m_oggMux);
             gst_element_unlink(m_oggMux, m_fileSink);
-        } else if (lastCodec == 2) {
+        } else if (m_currentCodec == 2) {
             //wav
             gst_element_unlink(m_audioConvert, m_wavEnc);
             gst_element_unlink(m_wavEnc, m_fileSink);
@@ -261,7 +312,7 @@ void AudioRecorder::setCurrentCodec(const int value) {
         }
 
         logger->debug("{} AudioRecorder::setCurrentCodec({})", m_loggingPrefix, value);
-        lastCodec = value;
-        m_currentFileExt = m_fileExtensions.at(value);
+        m_currentCodec = value;
     }
+    m_currentFileExt = m_fileExtensions.at(value);
 }

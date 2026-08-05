@@ -100,6 +100,7 @@ QVariant TableModelRotation::data(const QModelIndex &index, int role) const {
         case Qt::ForegroundRole:
             if (m_singers.at(index.row()).id == m_currentSingerId && index.column() > 0)
                 return QColor("black");
+            return {};
         case Qt::DisplayRole:
             return getDisplayData(index);
         default:
@@ -322,6 +323,7 @@ int TableModelRotation::singerAdd(const QString &name, const int positionHint) {
                     singerMoved = true;
                 }
             }
+            break;
         default:
             break;
     }
@@ -738,18 +740,18 @@ bool TableModelRotation::dropMimeData(const QMimeData *data, Qt::DropAction acti
     }
 
     if (data->hasFormat("integer/songid")) {
-        unsigned int dropRow;
+        int dropRow;
         if (parent.row() >= 0) {
             dropRow = parent.row();
         } else if (row >= 0) {
             dropRow = row;
         } else {
-            dropRow = m_singers.size();
+            dropRow = static_cast<int>(m_singers.size());
         }
         emit songDroppedOnSinger(
-                index(static_cast<int>(dropRow), 0).data(Qt::UserRole).toInt(),
+                index(dropRow, 0).data(Qt::UserRole).toInt(),
                 data->data("integer/songid").toInt(),
-                static_cast<int>(dropRow)
+                dropRow
         );
     }
     return false;

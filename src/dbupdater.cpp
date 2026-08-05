@@ -446,7 +446,8 @@ void DbUpdater::fixMissingFiles(QVector<DbSongRecord> &filesMissingOnDisk, QStri
         bool matchFound = false;
         auto filenameWithoutPath = QFileInfo(missingFile.path).fileName();
         auto const lb = std::lower_bound(filesOnDiskFilenamesOnlySorted.begin(), filesOnDiskFilenamesOnlySorted.end(), filenameWithoutPath, caseInsensitiveSort);
-        if (lb->compare(filenameWithoutPath, Qt::CaseInsensitive) == 0) {
+        if (lb != filesOnDiskFilenamesOnlySorted.end() &&
+            lb->compare(filenameWithoutPath, Qt::CaseInsensitive) == 0) {
             query.bindValue(":newpath", *lb->string());
             query.bindValue(":id", missingFile.id);
 

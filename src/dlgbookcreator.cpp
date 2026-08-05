@@ -113,28 +113,24 @@ void DlgBookCreator::saveFontSettings() {
     m_settings.setBookCreatorFooterFont(fFont);
 }
 
-QStringList DlgBookCreator::getArtists() {
+QStringList DlgBookCreator::getBookEntries() {
     QSqlQuery query;
-    QStringList artists;
-    QString sql = "SELECT DISTINCT artist FROM dbsongs WHERE discid != '!!BAD!!' AND discid != '!!DROPPED!!' ORDER BY artist";
-    query.exec(sql);
+    QStringList entries;
+    query.exec("SELECT DISTINCT artist, title FROM dbsongs "
+               "WHERE discid != '!!BAD!!' AND discid != '!!DROPPED!!' "
+               "ORDER BY artist, title");
+    QString currentArtist;
+    bool firstArtist = true;
     while (query.next()) {
-        artists.append(query.value("artist").toString());
+        const QString artist = query.value("artist").toString();
+        if (firstArtist || artist != currentArtist) {
+            entries.append("-" + artist);
+            currentArtist = artist;
+            firstArtist = false;
+        }
+        entries.append("+" + query.value("title").toString());
     }
-    return artists;
-}
-
-QStringList DlgBookCreator::getTitles(const QString &artist) {
-    QSqlQuery query;
-    QStringList titles;
-    QString sql = "SELECT DISTINCT title FROM dbsongs WHERE artist = :artist AND discid != '!!BAD!!' AND discid != '!!DROPPED!!' ORDER BY title";
-    query.prepare(sql);
-    query.bindValue(":artist", artist);
-    query.exec();
-    while (query.next()) {
-        titles.append(query.value("title").toString());
-    }
-    return titles;
+    return entries;
 }
 
 void DlgBookCreator::writePdf(const QString &filename, int nCols) {
@@ -156,23 +152,10 @@ void DlgBookCreator::writePdf(const QString &filename, int nCols) {
             QMarginsF(ui->doubleSpinBoxLeft->value(), ui->doubleSpinBoxTop->value(), ui->doubleSpinBoxRight->value(),
                       ui->doubleSpinBoxBottom->value()), QPageLayout::Inch);
     QPainter painter(&pdf);
-    m_logger->info("{} Getting artists",m_loggingPrefix);
-    QStringList artists = getArtists();
-    m_logger->info("{} Got {} artists",m_loggingPrefix, artists.size());
-    QStringList entries;
-    m_logger->info("{} Getting titles for artists",m_loggingPrefix);
+    m_logger->info("{} Getting songbook entries",m_loggingPrefix);
     progress.setLabelText("Parsing song data");
-    progress.setMaximum(artists.size());
-    for (int i = 0; i < artists.size(); i++) {
-        QApplication::processEvents();
-        entries.append("-" + artists.at(i));
-        QStringList titles = getTitles(artists.at(i));
-        for (int j = 0; j < titles.size(); j++) {
-            entries.append("+" + titles.at(j));
-        }
-        progress.setValue(i);
-    }
-    m_logger->info("{} Done getting titles",m_loggingPrefix);
+    QStringList entries = getBookEntries();
+    m_logger->info("{} Got {} songbook entries",m_loggingPrefix, entries.size());
     QPen pen;
     pen.setColor(QColor(0, 0, 0));
     pen.setWidth(4);

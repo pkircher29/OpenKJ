@@ -23,7 +23,7 @@ private:
     QSet<QString> m_pathsWithChangedFiles;
     QTimer m_scanTimer;
 
-    QStringList enumeratePathsAsync(QStringList paths);
+    static QStringList enumeratePathsAsync(QStringList paths);
     void directoriesEnumerated();
     void directoryChanged(const QString& dirPath);
     void scanPaths();

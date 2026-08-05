@@ -91,8 +91,7 @@ QVariant TableModelHistorySongs::getDisplayData(const QModelIndex &index) const 
 }
 
 void TableModelHistorySongs::loadSinger(const int historySingerId) {
-    emit layoutAboutToBeChanged();
-    beginInsertRows(QModelIndex(), m_songs.size(), m_songs.size());
+    beginResetModel();
     m_songs.clear();
     QSqlQuery query;
     query.prepare("SELECT * from historySongs WHERE historySinger = :historySinger");
@@ -111,9 +110,8 @@ void TableModelHistorySongs::loadSinger(const int historySingerId) {
         song.lastPlayed = (query.value(8).canConvert<QDateTime>()) ? query.value(8).toDateTime() : QDateTime();
         m_songs.emplace_back(song);
     }
+    endResetModel();
     sort(m_lastSortColumn, m_lastSortOrder);
-    emit layoutChanged();
-    emit endInsertRows();
 }
 
 void TableModelHistorySongs::loadSinger(const QString &historySingerName) {
@@ -126,9 +124,9 @@ void TableModelHistorySongs::loadSinger(const QString &historySingerName) {
         loadSinger(query.value(0).toUInt());
     else {
         m_logger->debug("{} No history found for singer '{}'. Nothing loaded", m_loggingPrefix, historySingerName);
-        emit layoutAboutToBeChanged();
+        beginResetModel();
         m_songs.clear();
-        emit layoutChanged();
+        endResetModel();
     }
 }
 
@@ -269,10 +267,10 @@ std::vector<okj::HistorySong> TableModelHistorySongs::getSingerSongs(const int h
 }
 
 void TableModelHistorySongs::refresh() {
-    if (getSingerId(m_currentSinger) != -1) {
-        emit layoutAboutToBeChanged();
+    if (getSingerId(m_currentSinger) == -1) {
+        beginResetModel();
         m_songs.clear();
-        emit layoutChanged();
+        endResetModel();
         return;
     }
     loadSinger(m_currentSinger);
@@ -341,7 +339,7 @@ void TableModelHistorySongs::sort(int column, Qt::SortOrder order) {
     m_lastSortOrder = order;
     emit layoutAboutToBeChanged();
     if (order == Qt::DescendingOrder) {
-        std::sort(m_songs.begin(), m_songs.end(), [&column](okj::HistorySong a, okj::HistorySong b) {
+        std::sort(m_songs.begin(), m_songs.end(), [&column](const okj::HistorySong &a, const okj::HistorySong &b) {
             switch (column) {
                 case 3:
                     return (a.artist.toLower() > b.artist.toLower());
@@ -360,7 +358,7 @@ void TableModelHistorySongs::sort(int column, Qt::SortOrder order) {
             }
         });
     } else {
-        std::sort(m_songs.begin(), m_songs.end(), [&column](okj::HistorySong a, okj::HistorySong b) {
+        std::sort(m_songs.begin(), m_songs.end(), [&column](const okj::HistorySong &a, const okj::HistorySong &b) {
             switch (column) {
                 case 3:
                     return (a.artist.toLower() < b.artist.toLower());

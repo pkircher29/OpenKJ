@@ -113,8 +113,11 @@ void DlgDatabase::on_buttonNew_clicked()
             if (selected.contains(tr("Custom")))
             {
                 pattern = SourceDir::CUSTOM;
-                QString name = selected.split(": ").at(1);
-                query.exec("SELECT patternid FROM custompatterns WHERE name == \"" + name + "\"");
+                const int separator = selected.indexOf(": ");
+                const QString name = separator >= 0 ? selected.mid(separator + 2) : selected;
+                query.prepare("SELECT patternid FROM custompatterns WHERE name = :name");
+                query.bindValue(":name", name);
+                query.exec();
                 if (query.first())
                     customPattern = query.value(0).toInt();
             }

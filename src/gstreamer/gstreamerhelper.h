@@ -8,12 +8,13 @@
 
 struct PadInfo
 {
-    GstElement *element;
+    GstElement *element{nullptr};
     std::string pad;
 };
 
 bool gsthlp_is_sink_linked(GstElement *element);
 
+// Returns a referenced element. The caller must release it with gst_object_unref().
 GstElement* gsthlp_get_peer_element(GstElement *element, const gchar* sinkName);
 
 void gsthlp_bin_try_remove(GstBin *bin, std::vector<GstElement *> elements);

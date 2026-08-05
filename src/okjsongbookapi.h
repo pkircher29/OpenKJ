@@ -17,12 +17,12 @@ std::ostream& operator<<(std::ostream& os, const QString& s);
 class OkjsRequest
 {
 public:
-    int requestId;
+    int requestId{0};
     QString singer;
     QString artist;
     QString title;
-    int key;
-    int time;
+    int key{0};
+    int time{0};
     bool operator == (const OkjsRequest& r) const;
 };
 
@@ -32,10 +32,10 @@ typedef QList<OkjsRequest> OkjsRequests;
 class OkjsVenue
 {
 public:
-    int venueId;
+    int venueId{0};
     QString name;
     QString urlName;
-    bool accepting;
+    bool accepting{false};
     bool operator == (const OkjsVenue& v) const;
 };
 
@@ -62,6 +62,7 @@ private:
     int entitledSystems;
     bool programIsIdle;
     bool cancelUpdate;
+    bool updateFailed{false};
     bool updateInProgress;
     Settings m_settings;
 
@@ -80,6 +81,7 @@ public:
     void getEntitledSystemCount();
     [[nodiscard]] int entitledSystemCount() const { return entitledSystems; }
     [[nodiscard]] bool updateWasCancelled() const {return cancelUpdate; }
+    [[nodiscard]] bool updateWasSuccessful() const {return !cancelUpdate && !updateFailed; }
     void triggerTestAdd();
 
 signals:

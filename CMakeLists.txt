@@ -117,11 +117,16 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(STATIC_TAGLIB True)
     set(WINDOWS_ICON_RC "src/appicon.rc")
     if (CMAKE_SIZEOF_VOID_P EQUAL 4)
-	set(GST_BASE_PATH "C:/Program Files/gstreamer/1.0/mingw_x86")
-	set(GST_BASE_PATH_NATIVE "C:\\Program Files\\gstreamer\\1.0\\mingw_x86")
+        set(GST_DEFAULT_BASE_PATH "C:/Program Files/gstreamer/1.0/mingw_x86")
     elseif (CMAKE_SIZEOF_VOID_P EQUAL 8)
-	set(GST_BASE_PATH "C:/Program Files/gstreamer/1.0/mingw_x86_64")
-	set(GST_BASE_PATH_NATIVE "C:\\Program Files\\gstreamer\\1.0\\mingw_x86_64")
+        set(GST_DEFAULT_BASE_PATH "C:/Program Files/gstreamer/1.0/mingw_x86_64")
+    endif ()
+    set(GST_BASE_PATH "${GST_DEFAULT_BASE_PATH}" CACHE PATH "Path to the Windows GStreamer SDK")
+    file(TO_NATIVE_PATH "${GST_BASE_PATH}" GST_BASE_PATH_NATIVE)
+    if (NOT EXISTS "${GST_BASE_PATH}/include/gstreamer-1.0/gst/gst.h")
+        message(FATAL_ERROR
+                "GStreamer development headers were not found under '${GST_BASE_PATH}'. "
+                "Install the SDK or configure with -DGST_BASE_PATH=<gstreamer-sdk-path>.")
     endif ()
     message("Using GST_BASE_PATH: ${GST_BASE_PATH}")
     message("Using GST_BASE_PATH_NATIVE: ${GST_BASE_PATH_NATIVE}")
@@ -769,4 +774,27 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     endif ()
 endif ()
 
+include(CTest)
+if (BUILD_TESTING)
+    add_executable(openkj_cdg_scroll_regression
+            tests/cdg_scroll_regression.cpp
+            src/cdg/cdgimageframe.cpp
+    )
+    target_include_directories(openkj_cdg_scroll_regression PRIVATE src)
+    target_link_libraries(openkj_cdg_scroll_regression PRIVATE Qt${QT_VERSION_MAJOR}::Gui)
+    add_test(NAME cdg_scroll_regression COMMAND openkj_cdg_scroll_regression)
+
+    add_executable(openkj_settings_security_regression
+            tests/settings_security_regression.cpp
+            src/settings.cpp
+            src/simplecrypt.cpp
+    )
+    target_include_directories(openkj_settings_security_regression PRIVATE src)
+    target_link_libraries(openkj_settings_security_regression PRIVATE
+            Qt${QT_VERSION_MAJOR}::Core
+            Qt${QT_VERSION_MAJOR}::Gui
+            Qt${QT_VERSION_MAJOR}::Widgets
+    )
+    add_test(NAME settings_security_regression COMMAND openkj_settings_security_regression)
+endif ()
 

@@ -20,13 +20,17 @@
 
 
 #include "mzarchive.h"
+#include "archivepathutil.h"
 #include <QFile>
 #include <QBuffer>
 #include <QTemporaryDir>
+#include <QFileInfo>
+#include <QDir>
 #include "src/miniz/miniz.h"
 #ifdef Q_OS_WIN
 #include <io.h>
 #endif
+
 
 MzArchive::MzArchive(const QString &ArchiveFile, QObject *parent) : QObject(parent)
 {
@@ -238,40 +242,53 @@ bool MzArchive::findEntries()
         m_logger->warn("{} Error opening zip file!", m_loggingPrefix);
         return false;
     }
-    unsigned int files = mz_zip_reader_get_num_files(&archive);
-    for (unsigned int i=0; i < files; i++)
-    {
-        if (mz_zip_reader_file_stat(&archive, i, &fStat))
-        {
-            QString fileName = fStat.m_filename;
-            if (fileName.endsWith(".cdg",Qt::CaseInsensitive))
-            {
-                m_cdgFileIndex = fStat.m_file_index;
-                m_cdgSize = fStat.m_uncomp_size;
-                m_cdgSupportedCompression = fStat.m_is_supported;
-                m_cdgFound = true;
+    struct EntryInfo {
+        QString fileName;
+        QString extension;
+        unsigned int index;
+        unsigned int size;
+        bool supported;
+    };
+    QList<EntryInfo> cdgEntries;
+    QList<EntryInfo> audioEntries;
+    const unsigned int files = mz_zip_reader_get_num_files(&archive);
+    for (unsigned int i = 0; i < files; ++i) {
+        if (!mz_zip_reader_file_stat(&archive, i, &fStat))
+            continue;
+        const QString fileName = fStat.m_filename;
+        if (fileName.endsWith(".cdg", Qt::CaseInsensitive)) {
+            cdgEntries.append({fileName, ".cdg", fStat.m_file_index,
+                               static_cast<unsigned int>(fStat.m_uncomp_size),
+                               static_cast<bool>(fStat.m_is_supported)});
+            continue;
+        }
+        for (const auto &extension : audioExtensions) {
+            if (fileName.endsWith(extension, Qt::CaseInsensitive)) {
+                audioEntries.append({fileName, extension, fStat.m_file_index,
+                                     static_cast<unsigned int>(fStat.m_uncomp_size),
+                                     static_cast<bool>(fStat.m_is_supported)});
+                break;
             }
-            else
-            {
-                for (int e=0; e < audioExtensions.size(); e++)
-                {
-                    if (fileName.endsWith(audioExtensions.at(e), Qt::CaseInsensitive))
-                    {
-                        m_audioFileIndex = fStat.m_file_index;
-                        audioExt = audioExtensions.at(e);
-                        m_audioSize = fStat.m_uncomp_size;
-                        m_audioSupportedCompression = fStat.m_is_supported;
-                        m_audioFound = true;
-                    }
-                }
-            }
-            if (m_audioFound && m_cdgFound && m_cdgSupportedCompression && m_audioSupportedCompression)
-            {
-                mz_zip_reader_end(&archive);
+        }
+    }
+    for (const auto &cdgEntry : cdgEntries) {
+        const QString cdgStem = okj::archiveEntryStem(cdgEntry.fileName);
+        for (const auto &audioEntry : audioEntries) {
+            if (okj::archiveEntryStem(audioEntry.fileName) != cdgStem)
+                continue;
+            m_cdgFileIndex = cdgEntry.index;
+            m_cdgSize = static_cast<int>(cdgEntry.size);
+            m_cdgSupportedCompression = cdgEntry.supported;
+            m_cdgFound = true;
+            m_audioFileIndex = audioEntry.index;
+            audioExt = audioEntry.extension;
+            m_audioSize = audioEntry.size;
+            m_audioSupportedCompression = audioEntry.supported;
+            m_audioFound = true;
+            mz_zip_reader_end(&archive);
+            if (m_cdgSupportedCompression && m_audioSupportedCompression)
                 return true;
-            }
-            else if (m_audioFound && m_cdgFound && (!m_cdgSupportedCompression || !m_audioSupportedCompression))
-                return oka.isValidKaraokeFile();
+            return oka.isValidKaraokeFile();
         }
     }
     mz_zip_reader_end(&archive);

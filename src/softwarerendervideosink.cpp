@@ -111,31 +111,45 @@ bool SoftwareRenderVideoSink::pullSampleAndDrawImage()
 
     if (sample)
     {
-        SampleInfo *info = new SampleInfo();
-        info->sample = sample;
-        info->bufferInfo = new GstMapInfo;
-        GstCaps *caps;
-        GstStructure *s;
-        const gchar *format;
-        int width, height;
+        GstCaps *caps = gst_sample_get_caps(sample);
+        GstStructure *structure = caps && gst_caps_get_size(caps) > 0
+                                  ? gst_caps_get_structure(caps, 0) : nullptr;
+        int width = 0;
+        int height = 0;
+        const gchar *format = structure ? gst_structure_get_string(structure, "format") : nullptr;
+        if (!structure || !format ||
+            !gst_structure_get_int(structure, "width", &width) ||
+            !gst_structure_get_int(structure, "height", &height))
+        {
+            gst_sample_unref(sample);
+            return false;
+        }
 
-        caps = gst_sample_get_caps(sample);
-        s = gst_caps_get_structure(caps, 0);
-        gst_structure_get_int(s, "width", &width);
-        gst_structure_get_int(s, "height", &height);
-        format = gst_structure_get_string(s, "format");
-
-        info->buffer = gst_sample_get_buffer (sample);
-
-        gst_buffer_map(info->buffer, info->bufferInfo, GST_MAP_READ);
-        guint8 *rawFrame = info->bufferInfo->data;
-
-        QImage::Format qtFormat;
+        QImage::Format qtFormat = QImage::Format_Invalid;
 
         if (strcmp(format, "RGB16") == 0)
             qtFormat = QImage::Format_RGB16;
         else if (strcmp(format, "BGRx") == 0)
             qtFormat = QImage::Format_RGB32;
+
+        if (qtFormat == QImage::Format_Invalid)
+        {
+            gst_sample_unref(sample);
+            return false;
+        }
+
+        SampleInfo *info = new SampleInfo();
+        info->sample = sample;
+        info->buffer = gst_sample_get_buffer(sample);
+        info->bufferInfo = new GstMapInfo;
+        if (!info->buffer || !gst_buffer_map(info->buffer, info->bufferInfo, GST_MAP_READ))
+        {
+            gst_sample_unref(sample);
+            delete info->bufferInfo;
+            delete info;
+            return false;
+        }
+        guint8 *rawFrame = info->bufferInfo->data;
 
         QImage frame(rawFrame, width, height, qtFormat, cleanupFunction, info);
         m_buffer = frame;
@@ -144,7 +158,7 @@ bool SoftwareRenderVideoSink::pullSampleAndDrawImage()
     {
         // No sample found in queue - are we still playing?
         GstState state = GST_STATE_NULL;
-        gst_element_get_state(reinterpret_cast<GstElement*>(m_appSink), &state, nullptr, GST_CLOCK_TIME_NONE);
+        gst_element_get_state(reinterpret_cast<GstElement*>(m_appSink), &state, nullptr, 0);
 
         if (state == GST_STATE_NULL)
         {

@@ -131,7 +131,8 @@ void BmDbUpdateThread::startUnthreaded()
     emit stateChanged("Finding media files...");
     QStringList files = findMediaFiles(m_path);
     emit progressMessage("Found " + QString::number(files.size()) + " files.");
-    QSqlQuery query;
+    QSqlDatabase activeDatabase = QSqlDatabase::database();
+    QSqlQuery query(activeDatabase);
     emit stateChanged("Getting metadata and adding songs to the database");
     emit progressMessage("Getting metadata and adding songs to the database");
     qInfo() << "Setting sqlite synchronous mode to OFF";
@@ -142,9 +143,16 @@ void BmDbUpdateThread::startUnthreaded()
     qInfo() << query.lastError();
     query.exec("PRAGMA temp_store=2");
     qInfo() << "Beginning transaction";
-    database.transaction();
-    qInfo() << query.lastError();
-    query.prepare("INSERT OR IGNORE INTO bmsongs (artist,title,path,filename,duration,searchstring) VALUES(:artist, :title, :path, :filename, :duration, :searchstring)");
+    if (!activeDatabase.transaction()) {
+        qWarning() << "Unable to start break-music import transaction:" << activeDatabase.lastError();
+        return;
+    }
+    bool success = query.prepare(
+            "INSERT INTO bmsongs (artist,title,path,filename,duration,searchstring) "
+            "VALUES(:artist, :title, :path, :filename, :duration, :searchstring) "
+            "ON CONFLICT(path) DO UPDATE SET "
+            "artist=excluded.artist, title=excluded.title, filename=excluded.filename, "
+            "duration=excluded.duration, searchstring=excluded.searchstring");
     for (int i=0; i < files.size(); i++)
     {
         QApplication::processEvents();
@@ -160,10 +168,18 @@ void BmDbUpdateThread::startUnthreaded()
         query.bindValue(":filename", files.at(i));
         query.bindValue(":duration", duration);
         query.bindValue(":searchstring", artist + title + files.at(i));
-        query.exec();
+        if (!query.exec()) {
+            qWarning() << "Unable to update break-music record:" << query.lastError();
+            success = false;
+            break;
+        }
         emit progressChanged(i + 1, files.size());
     }
-    database.commit();
-    qInfo() << query.lastError();
+    if (success) {
+        if (!activeDatabase.commit())
+            qWarning() << "Unable to commit break-music import:" << activeDatabase.lastError();
+    } else {
+        activeDatabase.rollback();
+    }
     emit progressMessage("Finished processing files for directory: " + m_path);
 }

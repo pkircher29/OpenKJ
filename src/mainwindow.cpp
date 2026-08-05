@@ -50,8 +50,6 @@
 #endif
 
 
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "OCDFAInspection"
 void MainWindow::addSfxButton(const QString &filename, const QString &label, bool reset) {
     static int numButtons = 0;
     if (reset)
@@ -67,7 +65,6 @@ void MainWindow::addSfxButton(const QString &filename, const QString &label, boo
             &MainWindow::sfxButtonContextMenuRequested);
     numButtons++;
 }
-#pragma clang diagnostic pop
 
 void MainWindow::refreshSfxButtons() {
     QLayoutItem *item;
@@ -3686,15 +3683,20 @@ void MainWindow::btnRotDownClicked() {
 
 void MainWindow::btnRotBottomClicked() {
     auto indexes = ui->tableViewRotation->selectionModel()->selectedRows();
+    if (indexes.isEmpty())
+        return;
     std::vector<int> singerIds;
     std::for_each(indexes.begin(), indexes.end(), [&](QModelIndex index) {
         singerIds.emplace_back(index.data(Qt::UserRole).toInt());
     });
+    const int lastSingerPosition = static_cast<int>(m_rotModel.singerCount()) - 1;
     std::for_each(singerIds.begin(), singerIds.end(), [&](auto singerId) {
-        m_rotModel.singerMove(m_rotModel.getSinger(singerId).position, m_rotModel.singerCount() - 1);
+        m_rotModel.singerMove(m_rotModel.getSinger(singerId).position, lastSingerPosition);
     });
-    auto topLeft = ui->tableViewRotation->model()->index((int) (m_rotModel.singerCount() - singerIds.size()), 0);
-    auto bottomRight = ui->tableViewRotation->model()->index(static_cast<int>(m_rotModel.singerCount() - 1), m_rotModel.columnCount(QModelIndex()) - 1);
+    auto topLeft = ui->tableViewRotation->model()->index(
+            static_cast<int>(m_rotModel.singerCount() - singerIds.size()), 0);
+    auto bottomRight = ui->tableViewRotation->model()->index(
+            lastSingerPosition, m_rotModel.columnCount(QModelIndex()) - 1);
     ui->tableViewRotation->clearSelection();
     ui->tableViewRotation->selectionModel()->select(QItemSelection(topLeft, bottomRight), QItemSelectionModel::Select);
     rotationDataChanged();
@@ -4142,7 +4144,7 @@ void MainWindow::buttonHistoryPlayClicked() {
     auto selRows = ui->tableViewHistory->selectionModel()->selectedRows();
     if (selRows.empty())
         return;
-    auto index = selRows.at(0);
+    const auto &index = selRows.at(0);
     m_k2kTransition = false;
     if (m_mediaBackendKar.state() == MediaBackend::PlayingState) {
         if (m_settings.showSongInterruptionWarning()) {

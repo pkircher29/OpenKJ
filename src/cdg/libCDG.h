@@ -28,6 +28,7 @@
 #include <QVector>
 #include <QImage>
 #include <QColor>
+#include <algorithm>
 #include <vector>
 #include <array>
 
@@ -177,9 +178,9 @@ struct CdgScrollCmdData
         hScroll = (data[1] & 0x3F);
         vScroll = (data[2] & 0x3F);
         hSCmd = (hScroll & 0x30) >> 4;
-        hSOffset = (hScroll & 0x07);
+        hSOffset = std::clamp(hScroll & 0x07, 0, 5);
         vSCmd = (vScroll & 0x30) >> 4;
-        vSOffset = (vScroll & 0x0F);
+        vSOffset = std::clamp(vScroll & 0x0F, 0, 11);
     }
     char color;
     char hScroll;

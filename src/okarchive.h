@@ -34,7 +34,7 @@ std::ostream& operator<<(std::ostream& os, const QString& s);
 struct zipEntry
 {
     QString fileName;
-    int fileSize;
+    int fileSize{0};
 };
 
 typedef QList<zipEntry> zipEntries;

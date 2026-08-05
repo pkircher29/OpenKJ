@@ -1,0 +1,158 @@
+name: OpenKJ 3.0 cross-platform builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v3.0.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OPENKJ_VERSION: '3.0.0'
+
+jobs:
+  windows:
+    name: Windows x64 (MSVC)
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Qt 5.15.2
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: '5.15.2'
+          arch: win64_msvc2019_64
+          archives: qtbase qtsvg
+          cache: true
+
+      - name: Download and verify MSVC GStreamer 1.26.9
+        shell: pwsh
+        run: |
+          $runtimeUrl = 'https://gstreamer.freedesktop.org/data/pkg/windows/1.26.9/msvc/gstreamer-1.0-msvc-x86_64-1.26.9.msi'
+          $develUrl = 'https://gstreamer.freedesktop.org/data/pkg/windows/1.26.9/msvc/gstreamer-1.0-devel-msvc-x86_64-1.26.9.msi'
+          Invoke-WebRequest $runtimeUrl -OutFile gstreamer-runtime.msi
+          Invoke-WebRequest $develUrl -OutFile gstreamer-devel.msi
+          if ((Get-FileHash gstreamer-runtime.msi -Algorithm SHA256).Hash.ToLower() -ne 'ef56a1e9077c6cadcf8384369d1e435a0f3bc0d5a26594773256cffe79f40ecb') { throw 'GStreamer runtime checksum mismatch' }
+          if ((Get-FileHash gstreamer-devel.msi -Algorithm SHA256).Hash.ToLower() -ne '79c7ca2a5013181d94a2c823ef1c8a575f3e036e813633dc3e5ac3d393581a15') { throw 'GStreamer development checksum mismatch' }
+          Start-Process msiexec.exe -Wait -ArgumentList '/i', (Resolve-Path gstreamer-runtime.msi), '/qn', 'ADDLOCAL=ALL'
+          Start-Process msiexec.exe -Wait -ArgumentList '/i', (Resolve-Path gstreamer-devel.msi), '/qn', 'ADDLOCAL=ALL'
+          $gst = 'C:\Program Files\gstreamer\1.0\msvc_x86_64'
+          if (-not (Test-Path "$gst\include\gstreamer-1.0\gst\gst.h")) { throw "GStreamer SDK was not installed at $gst" }
+          "GST_BASE_PATH=$gst" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DGST_BASE_PATH="$env:GST_BASE_PATH"
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release --target openkj openkj_cdg_scroll_regression openkj_settings_security_regression --parallel 4
+
+      - name: Run regression tests
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package portable Windows build
+        shell: pwsh
+        run: |
+          $package = "dist\OpenKJ-$env:OPENKJ_VERSION-Windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          Copy-Item build\Release\openkj.exe "$package\OpenKJ.exe"
+          Copy-Item LICENSE "$package\LICENSE.txt"
+          & windeployqt --release --compiler-runtime "$package\OpenKJ.exe"
+          Copy-Item "$env:GST_BASE_PATH\*" $package -Recurse -Force
+          Copy-Item "$env:GST_BASE_PATH\bin\*.dll" $package -Force
+          Compress-Archive -Path $package -DestinationPath "OpenKJ-$env:OPENKJ_VERSION-Windows-x64.zip"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: OpenKJ-${{ env.OPENKJ_VERSION }}-Windows-x64
+          path: OpenKJ-${{ env.OPENKJ_VERSION }}-Windows-x64.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64 (Ubuntu)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build qtbase5-dev libqt5svg5-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtag1-dev
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPDLOG_USE_BUNDLED=true
+          cmake --build build --parallel 4
+
+      - name: Run regression tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package Linux build
+        run: |
+          package="OpenKJ-${OPENKJ_VERSION}-Linux-x64"
+          mkdir -p "$package"
+          cp build/openkj "$package/OpenKJ"
+          cp LICENSE "$package/LICENSE.txt"
+          ldd "$package/OpenKJ" > "$package/runtime-dependencies.txt"
+          tar -czf "$package.tar.gz" "$package"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: OpenKJ-${{ env.OPENKJ_VERSION }}-Linux-x64
+          path: OpenKJ-${{ env.OPENKJ_VERSION }}-Linux-x64.tar.gz
+          if-no-files-found: error
+
+  macos:
+    name: macOS arm64
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: brew install cmake ninja pkgconf qt@5 gstreamer
+
+      - name: Configure and build
+        env:
+          CMAKE_PREFIX_PATH: /opt/homebrew/opt/qt@5
+          PKG_CONFIG_PATH: /opt/homebrew/opt/qt@5/lib/pkgconfig:/opt/homebrew/lib/pkgconfig
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPDLOG_USE_BUNDLED=true
+          cmake --build build --parallel 4
+
+      - name: Run regression tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package unsigned macOS build
+        run: |
+          package="OpenKJ-${OPENKJ_VERSION}-macOS-arm64"
+          mkdir -p "$package"
+          cp -R build/openkj.app "$package/OpenKJ.app"
+          cp LICENSE "$package/LICENSE.txt"
+          otool -L "$package/OpenKJ.app/Contents/MacOS/openkj" > "$package/runtime-dependencies.txt"
+          tar -czf "$package.tar.gz" "$package"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: OpenKJ-${{ env.OPENKJ_VERSION }}-macOS-arm64
+          path: OpenKJ-${{ env.OPENKJ_VERSION }}-macOS-arm64.tar.gz
+          if-no-files-found: error

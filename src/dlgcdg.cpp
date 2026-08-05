@@ -363,7 +363,7 @@ void DlgCdg::showEvent(QShowEvent *event)
     if (m_settings.cdgWindowFullscreen())
     {
         this->showNormal();
-        QTimer::singleShot(100, [&] () {
+        QTimer::singleShot(100, this, [this] {
             ui->btnToggleFullscreen->setText("Make Windowed");
             this->showFullScreen();
             cdgOffsetsChanged();
