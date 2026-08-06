@@ -33,7 +33,7 @@ jobs:
         with:
           version: '5.15.2'
           arch: win64_msvc2019_64
-          archives: qtbase qtsvg
+          archives: qtbase qtsvg qttools
           cache: true
 
       - name: Download and verify MSVC GStreamer 1.26.9
@@ -70,12 +70,27 @@ jobs:
           New-Item -ItemType Directory -Force $package | Out-Null
           Copy-Item build\Release\openkj.exe "$package\OpenKJ.exe"
           Copy-Item LICENSE "$package\LICENSE.txt"
-          # windeployqt is not on PATH — the Qt install action exports
-          # QT_ROOT_DIR, so call it there rather than relying on PATH.
-          $windeployqt = Join-Path $env:QT_ROOT_DIR "bin\windeployqt.exe"
-          if (-not (Test-Path $windeployqt)) {
-            throw "windeployqt not found at $windeployqt"
+          # windeployqt is not on PATH, and its location varies with how the
+          # Qt install action lays things out. Look for it rather than
+          # assuming a path; print the tree if it is genuinely absent so the
+          # log says why instead of just failing.
+          $found = @()
+          foreach ($root in @($env:QT_ROOT_DIR, "$env:RUNNER_WORKSPACE\Qt", "D:\a")) {
+            if ($root -and (Test-Path $root)) {
+              $found = Get-ChildItem -Path $root -Filter windeployqt.exe -Recurse -ErrorAction SilentlyContinue
+              if ($found) { break }
+            }
           }
+          if (-not $found) {
+            Write-Host "QT_ROOT_DIR = $env:QT_ROOT_DIR"
+            Get-ChildItem $env:QT_ROOT_DIR -ErrorAction SilentlyContinue |
+              ForEach-Object { Write-Host "  root: $($_.Name)" }
+            Get-ChildItem "$env:QT_ROOT_DIR\bin" -ErrorAction SilentlyContinue |
+              ForEach-Object { Write-Host "  bin:  $($_.Name)" }
+            throw "windeployqt.exe not found under QT_ROOT_DIR or the runner workspace"
+          }
+          $windeployqt = $found[0].FullName
+          Write-Host "Using windeployqt: $windeployqt"
           & $windeployqt --release --compiler-runtime "$package\OpenKJ.exe"
           if ($LASTEXITCODE -ne 0) { throw "windeployqt failed ($LASTEXITCODE)" }
           Copy-Item "$env:GST_BASE_PATH\*" $package -Recurse -Force
