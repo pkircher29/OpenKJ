@@ -70,7 +70,14 @@ jobs:
           New-Item -ItemType Directory -Force $package | Out-Null
           Copy-Item build\Release\openkj.exe "$package\OpenKJ.exe"
           Copy-Item LICENSE "$package\LICENSE.txt"
-          & windeployqt --release --compiler-runtime "$package\OpenKJ.exe"
+          # windeployqt is not on PATH — the Qt install action exports
+          # QT_ROOT_DIR, so call it there rather than relying on PATH.
+          $windeployqt = Join-Path $env:QT_ROOT_DIR "bin\windeployqt.exe"
+          if (-not (Test-Path $windeployqt)) {
+            throw "windeployqt not found at $windeployqt"
+          }
+          & $windeployqt --release --compiler-runtime "$package\OpenKJ.exe"
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed ($LASTEXITCODE)" }
           Copy-Item "$env:GST_BASE_PATH\*" $package -Recurse -Force
           Copy-Item "$env:GST_BASE_PATH\bin\*.dll" $package -Force
           Compress-Archive -Path $package -DestinationPath "OpenKJ-$env:OPENKJ_VERSION-Windows-x64.zip"
