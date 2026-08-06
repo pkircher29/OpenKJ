@@ -19,7 +19,7 @@ jobs:
         submodules: recursive
 
     - name: install deps
-      run: brew install cmake ninja pkgconf cppunit utf8cpp qt@5 gstreamer
+      run: brew install cmake ninja pkgconf cppunit utf8cpp qt@5 gstreamer spdlog
 
     - name: Build
       env:
@@ -29,7 +29,7 @@ jobs:
         QT_DIR: "/opt/homebrew/opt/qt@5/"
         Qt5_DIR: "/opt/homebrew/opt/qt@5/"
       run: |
-        cmake -DSPDLOG_USE_BUNDLED=true . -B build -G Ninja
+        cmake . -B build -G Ninja
         ninja -C build
     - name: Upload app
       uses: actions/upload-artifact@v4
