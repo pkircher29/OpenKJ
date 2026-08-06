@@ -63,17 +63,21 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Package portable Windows build
+      - name: Stage Windows runtime payload
         shell: pwsh
         run: |
-          $package = "dist\OpenKJ-$env:OPENKJ_VERSION-Windows-x64"
-          New-Item -ItemType Directory -Force $package | Out-Null
-          Copy-Item build\Release\openkj.exe "$package\OpenKJ.exe"
-          Copy-Item LICENSE "$package\LICENSE.txt"
-          # windeployqt is not on PATH, and its location varies with how the
-          # Qt install action lays things out. Look for it rather than
-          # assuming a path; print the tree if it is genuinely absent so the
-          # log says why instead of just failing.
+          # Runtime files only. The previous step copied the entire GStreamer
+          # install ($env:GST_BASE_PATH\*) including headers, .lib import
+          # libraries, pkgconfig and .pdb symbols, which made the package
+          # ~740 MB. None of that is needed to run OpenKJ.
+          $payload = "output"
+          Remove-Item $payload -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $payload | Out-Null
+          Copy-Item build\Release\openkj.exe "$payload\OpenKJ.exe"
+          Copy-Item LICENSE "$payload\LICENSE.txt"
+
+          # Qt runtime + platform plugins, resolved from the Qt install rather
+          # than PATH (windeployqt is not on PATH on the runner).
           $found = @()
           foreach ($root in @($env:QT_ROOT_DIR, "$env:RUNNER_WORKSPACE\Qt", "D:\a")) {
             if ($root -and (Test-Path $root)) {
@@ -81,27 +85,53 @@ jobs:
               if ($found) { break }
             }
           }
-          if (-not $found) {
-            Write-Host "QT_ROOT_DIR = $env:QT_ROOT_DIR"
-            Get-ChildItem $env:QT_ROOT_DIR -ErrorAction SilentlyContinue |
-              ForEach-Object { Write-Host "  root: $($_.Name)" }
-            Get-ChildItem "$env:QT_ROOT_DIR\bin" -ErrorAction SilentlyContinue |
-              ForEach-Object { Write-Host "  bin:  $($_.Name)" }
-            throw "windeployqt.exe not found under QT_ROOT_DIR or the runner workspace"
-          }
+          if (-not $found) { throw "windeployqt.exe not found under QT_ROOT_DIR or the runner workspace" }
           $windeployqt = $found[0].FullName
           Write-Host "Using windeployqt: $windeployqt"
-          & $windeployqt --release --compiler-runtime "$package\OpenKJ.exe"
+          & $windeployqt --release --compiler-runtime "$payload\OpenKJ.exe"
           if ($LASTEXITCODE -ne 0) { throw "windeployqt failed ($LASTEXITCODE)" }
-          Copy-Item "$env:GST_BASE_PATH\*" $package -Recurse -Force
-          Copy-Item "$env:GST_BASE_PATH\bin\*.dll" $package -Force
-          Compress-Archive -Path $package -DestinationPath "OpenKJ-$env:OPENKJ_VERSION-Windows-x64.zip"
+
+          # GStreamer: runtime DLLs and the plugin directory only.
+          Copy-Item "$env:GST_BASE_PATH\bin\*.dll" $payload -Force
+          $plugins = Join-Path $payload "lib\gstreamer-1.0"
+          New-Item -ItemType Directory -Force $plugins | Out-Null
+          Copy-Item "$env:GST_BASE_PATH\lib\gstreamer-1.0\*.dll" $plugins -Force
+
+          # Bundled MSVC runtime so a clean machine can install unattended.
+          Invoke-WebRequest "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "$payload\vc_redist.x64.exe"
+
+          $size = [math]::Round((Get-ChildItem $payload -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB)
+          Write-Host "Payload size: $size MB"
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & $iscc "/DMyAppVersion=$env:OPENKJ_VERSION" "/DPayloadDir=..\output" "/DOutDir=..\dist" cd\openkj-ci.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
+          Get-ChildItem dist | ForEach-Object {
+            Write-Host ("Installer: {0}  {1} MB" -f $_.Name, [math]::Round($_.Length / 1MB))
+          }
+
+      - name: Package portable Windows build
+        shell: pwsh
+        run: |
+          $package = "dist\OpenKJ-$env:OPENKJ_VERSION-Windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          Copy-Item "output\*" $package -Recurse -Force
+          Compress-Archive -Path $package -DestinationPath "OpenKJ-$env:OPENKJ_VERSION-Windows-x64.zip" -Force
+          Remove-Item $package -Recurse -Force
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: OpenKJ-${{ env.OPENKJ_VERSION }}-Windows-x64
-          path: OpenKJ-${{ env.OPENKJ_VERSION }}-Windows-x64.zip
+          path: |
+            OpenKJ-${{ env.OPENKJ_VERSION }}-Windows-x64.zip
+            dist/OpenKJ-${{ env.OPENKJ_VERSION }}-Windows-x64-setup.exe
           if-no-files-found: error
 
   linux:
