@@ -4,7 +4,7 @@ Hey Open-KJ Community,
 
 Like many of you, I've relied on Open-KJ to run shows for years. But the upstream project has seen very little active development, leaving us with buggy builds and outdated dependencies.
 
-Rather than letting it rot, I patched up the codebase to give the community a working, stable build again.
+Rather than letting it sit, I ran a full reliability and security audit over the codebase — crashes, memory safety, data-loss bugs, SQL injection surface, and the build system. The complete list is in [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ## 1. Free OpenKJ 3.0 Bug-Fix & Maintenance Release
 
@@ -18,7 +18,7 @@ I've updated Open-KJ with modern build fixes, stability improvements, bug fixes,
 
 If you use Open-KJ's web-hosting features for online songbooks and requests, I am now offering dedicated Open-KJ-compatible hosting as an affordable option.
 
-**Old price:** $10/month
+**Their price:** from $9.99/month
 
 **My price:** $5/month, locked in forever for Open-KJ users
 

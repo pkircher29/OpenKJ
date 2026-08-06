@@ -2,23 +2,43 @@
 
 Hey OpenKJ Community,
 
-Like many of you, I've relied on OpenKJ to run shows for years. But as we all know, the upstream project has been largely abandoned for over two years—leaving us with buggy builds, outdated dependencies, and a dead hosting backend.
+Like many of you, I've relied on OpenKJ to run shows for years. Development upstream has slowed to a crawl, and the builds most of us are running carry bugs that have been there a long time.
 
-Rather than letting it rot, I patched up the codebase to give the community a working, stable build again.
+Rather than let it sit, I went through the codebase properly — not a quick patch, a full reliability and security audit across playback, the database layer, networking, and the build system.
 
 ## 🛠️ 1. Free OpenKJ Bug-Fix & Maintenance Release
 
-I've updated OpenKJ with modern build fixes and performance optimizations. Native builds are available for Windows, Linux, and macOS.
+Native builds for Windows, Linux, and macOS. Everything below is fixed in 3.0:
+
+**Crashes and memory safety**
+- Two confirmed GStreamer double-unrefs — one on media teardown, one in audio recording
+- Undefined behavior in CD+G scrolling, plus the oversized stack buffers behind it
+- A use-after-free in background directory scanning
+- Uninitialized video image formats; malformed frames now rejected safely
+
+**Data loss and corruption**
+- Singer history refresh was *clearing* valid history instead of loading it
+- Songbook uploads silently dropped rows at every 1,000-song boundary
+- Recordings now wait for EOS so encoded files finalize cleanly
+
+**Security**
+- User-controlled SQL converted to prepared statements with bound parameters
+- Legacy card/CVV persistence disabled and purged
+
+**Performance and stability**
+- Songbook PDF generation: N+1 database access replaced with one ordered query
+- SongShop login failures and malformed replies no longer trap the UI in an endless event loop
+
+That is the short list. The full audit — every fix, with the reasoning — is in [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 - **Cost:** 100% free and open source
 - **Download:** [GitHub Releases](https://github.com/pkircher29/OpenKJ/releases)
-- **What changed:** see [RELEASE_NOTES.md](RELEASE_NOTES.md)
 
 ## 🌐 2. OpenKJ Web Hosting is Back ($5/month)
 
-If you loved OpenKJ's web-hosting features for online songbooks and requests, you probably noticed the old backend went dark. I am now hosting dedicated OpenKJ web servers so you can get your online request system back online.
+If you pay for OpenKJ web hosting for your online songbook and requests, I'm now running compatible servers at half the price. Point OpenKJ at my server, paste your API key, and everything works the same — same protocol, same workflow. Switching back is just as easy, so there's nothing to lose by trying it.
 
-- **Old price:** $10/month
+- **Their price:** from $9.99/month
 - **My price:** $5/month — locked in forever for OpenKJ users
 
 ## 🚀 3. The "Not-So-Secret" Upgrade: Auto-KJ (+ 60-Day Free Trial)
