@@ -12,7 +12,7 @@ I've updated Open-KJ with modern build fixes, stability improvements, bug fixes,
 
 **Cost:** 100% free and open source
 
-**Download:** [GitHub release link to be inserted after publication]
+**Download:** https://github.com/pkircher29/OpenKJ/releases
 
 ## 2. Open-KJ-Compatible Web Hosting ($5/month)
 
@@ -39,7 +39,7 @@ What happens after your 60-day trial? You have total control:
 
 ## How to Get Started
 
-- **Grab the Open-KJ bug-fix update:** [Verified GitHub release link to be inserted]
+- **Grab the Open-KJ bug-fix update:** https://github.com/pkircher29/OpenKJ/releases
 - **Claim your 60-day free Auto-KJ trial and import your history:** https://auto-kj.com/#pricing
 - **Sign up for $5/month Open-KJ hosting:** https://auto-kj.com/#pricing
 
