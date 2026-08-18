@@ -27,8 +27,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Gui Sql Network Widgets Concurrent Svg PrintSupport REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Gui Sql Network Widgets Concurrent Svg PrintSupport)
 
 include_directories(
         src/
@@ -578,14 +577,14 @@ set(SOURCE_FILES
 
 set(LIBRARIES
         spdlog
-        Qt5::Widgets
-        Qt5::Core
-        Qt5::Gui
-        Qt5::Sql
-        Qt5::Network
-        Qt5::Svg
-        Qt5::PrintSupport
-        Qt5::Concurrent
+        Qt6::Widgets
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Sql
+        Qt6::Network
+        Qt6::Svg
+        Qt6::PrintSupport
+        Qt6::Concurrent
         )
 
 

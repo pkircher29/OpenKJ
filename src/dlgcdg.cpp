@@ -20,7 +20,6 @@
 
 #include "dlgcdg.h"
 #include "ui_dlgcdg.h"
-#include <QDesktopWidget>
 #include <QSvgRenderer>
 #include <QPainter>
 #include <QDir>
@@ -152,8 +151,13 @@ void DlgCdg::mouseDoubleClickEvent([[maybe_unused]]QMouseEvent *e)
     cdgOffsetsChanged();
     m_settings.setCdgWindowFullscreen(m_fullScreen);
     m_settings.saveWindowState(this);
-    QDesktopWidget widget;
-    m_settings.setCdgWindowFullscreenMonitor(widget.screenNumber(this));
+    auto *currentScreen = screen();
+    if (!currentScreen) {
+        currentScreen = QGuiApplication::primaryScreen();
+    }
+    if (currentScreen) {
+        m_settings.setCdgWindowFullscreenMonitor(QGuiApplication::screens().indexOf(currentScreen));
+    }
 }
 
 QFileInfoList DlgCdg::getSlideShowImages()
@@ -328,13 +332,28 @@ void DlgCdg::btnToggleFullscreenClicked()
     if (m_fullScreen)
     {
         showFullScreen();
+#ifdef Q_OS_WIN
+        SetWindowPos(reinterpret_cast<HWND>(winId()), HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#endif
     }
     else
+    {
         showNormal();
+#ifdef Q_OS_WIN
+        SetWindowPos(reinterpret_cast<HWND>(winId()), HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#endif
+    }
     m_settings.setCdgWindowFullscreen(m_fullScreen);
     m_settings.saveWindowState(this);
-    QDesktopWidget widget;
-    m_settings.setCdgWindowFullscreenMonitor(widget.screenNumber(this));
+    auto *currentScreen = screen();
+    if (!currentScreen) {
+        currentScreen = QGuiApplication::primaryScreen();
+    }
+    if (currentScreen) {
+        m_settings.setCdgWindowFullscreenMonitor(QGuiApplication::screens().indexOf(currentScreen));
+    }
     cdgOffsetsChanged();
 }
 
@@ -425,13 +444,11 @@ TransparentWidget::TransparentWidget(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint);
     auto layout = new QHBoxLayout(this);
     setLayout(layout);
-    layout->setMargin(0);
     layout->setSpacing(0);
     layout->setContentsMargins(0,0,0,0);
     setContentsMargins(0,0,0,0);
     m_label = std::make_unique<QLabel>(this);
     layout->addWidget(m_label.get());
-    m_label->setMargin(0);
     m_label->setSizePolicy(QSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding));
     m_label->setText("00:00");
     m_label->setAutoFillBackground(true);
