@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OPENKJ_VERSION: '3.0.0'
+  OPENKJ_VERSION: '3.0.1'
 
 jobs:
   windows:

@@ -5,10 +5,10 @@
 ; compile unattended.
 ;
 ; Driven entirely by /D defines from the workflow:
-;   iscc /DMyAppVersion=3.0.0 /DPayloadDir=..\output /DOutDir=..\dist cd\openkj-ci.iss
+;   iscc /DMyAppVersion=3.0.1 /DPayloadDir=..\output /DOutDir=..\dist cd\openkj-ci.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "3.0.0"
+  #define MyAppVersion "3.0.1"
 #endif
 #ifndef PayloadDir
   #define PayloadDir "..\output"
