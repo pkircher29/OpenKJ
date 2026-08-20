@@ -28,11 +28,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Qt 5.15.2
+      - name: Install Qt 6.7.2
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
-          version: '5.15.2'
-          arch: win64_msvc2019_64
+          version: '6.7.2'
+          arch: win64_msvc2022_64
           archives: qtbase qtsvg qttools
           cache: true
 
@@ -146,7 +146,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build qtbase5-dev libqt5svg5-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtag1-dev
+          sudo apt-get install -y cmake ninja-build qt6-base-dev libqt6svg6-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtag1-dev
 
       - name: Configure and build
         run: |
@@ -182,12 +182,12 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: brew install cmake ninja pkgconf qt@5 gstreamer
+        run: brew install cmake ninja pkgconf qt gstreamer
 
       - name: Configure and build
         env:
-          CMAKE_PREFIX_PATH: /opt/homebrew/opt/qt@5
-          PKG_CONFIG_PATH: /opt/homebrew/opt/qt@5/lib/pkgconfig:/opt/homebrew/lib/pkgconfig
+          CMAKE_PREFIX_PATH: /opt/homebrew/opt/qt
+          PKG_CONFIG_PATH: /opt/homebrew/opt/qt/lib/pkgconfig:/opt/homebrew/lib/pkgconfig
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPDLOG_USE_BUNDLED=true
           cmake --build build --parallel 4

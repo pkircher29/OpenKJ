@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build:
     name: Windows Builds
-    runs-on: windows-2025
+    runs-on: windows-2022
     strategy:
       matrix:
         include:
@@ -21,7 +21,7 @@ jobs:
             bits: 64
             arch: x86_64
             msvcarch: x64
-            qtarch: win64_msvc2019_64
+            qtarch: win64_msvc2022_64
 
     steps:
     - uses: actions/checkout@v5
@@ -71,13 +71,12 @@ jobs:
         start-process -wait msiexec -argumentlist '/q /i ${{ github.workspace }}\downloads\gstreamer-devel.msi ADDLOCAL=ALL'
         start-sleep 10
 
-    - name: Install Qt
+    - name: Install Qt 6
       uses: jurplel/install-qt-action@v4
       with:
-       version: '5.15.2'
+       version: '6.7.2'
        arch: ${{ matrix.qtarch }}
-       modules: 'qtnetworkauth'
-       archives: 'qtbase qtsvg'
+       archives: 'qtbase qtsvg qttools'
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build
