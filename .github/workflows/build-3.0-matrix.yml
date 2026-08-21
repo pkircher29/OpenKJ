@@ -33,7 +33,7 @@ jobs:
         with:
           version: '6.7.2'
           arch: win64_msvc2022_64
-          archives: qtbase qtsvg qttools
+          modules: 'qtsvg qttools'
           cache: true
 
       - name: Download and verify MSVC GStreamer 1.26.9

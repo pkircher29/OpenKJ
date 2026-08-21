@@ -649,40 +649,45 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
             ${GSTREAMER_FRAMEWORK}
             )
     if (NOT DEFINED BUILDONLY)
-        get_target_property(_qt5_qmake_location Qt5::qmake IMPORTED_LOCATION)
-        execute_process(
-                COMMAND "${_qt5_qmake_location}" -query QT_INSTALL_PREFIX
-                RESULT_VARIABLE return_code
-                OUTPUT_VARIABLE qt5_install_prefix
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-        if (qt5_install_prefix)
-            find_program(MACDEPLOYQT macdeployqt HINTS ${qt5_install_prefix} PATH_SUFFIXES bin)
-            if (MACDEPLOYQT)
-                if (DEFINED MAC_SIGNING_IDENTITY)
-                    add_custom_command(
-                            TARGET openkj
-                            COMMAND "${MACDEPLOYQT}"
-                            VERBATIM
-                            ARGS
-                            "${CMAKE_BINARY_DIR}/openkj.app"
-                            -codesign=${MAC_SIGNING_IDENTITY}
-                            "-appstore-compliant"
-                    )
-                else ()
-                    add_custom_command(
-                            TARGET openkj
-                            COMMAND "${MACDEPLOYQT}"
-                            ARGS "${CMAKE_BINARY_DIR}/openkj.app"
-                    )
-                endif ()
+        if (TARGET Qt6::qmake)
+            get_target_property(_qt_qmake_location Qt6::qmake IMPORTED_LOCATION)
+        elseif (TARGET Qt5::qmake)
+            get_target_property(_qt_qmake_location Qt5::qmake IMPORTED_LOCATION)
+        else ()
+            find_program(_qt_qmake_location qmake HINTS ${QT_DIR} ${Qt6_DIR} ${CMAKE_PREFIX_PATH} PATH_SUFFIXES bin)
+        endif ()
+        if (_qt_qmake_location)
+            execute_process(
+                    COMMAND "${_qt_qmake_location}" -query QT_INSTALL_PREFIX
+                    RESULT_VARIABLE return_code
+                    OUTPUT_VARIABLE qt_install_prefix
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+        endif ()
+        find_program(MACDEPLOYQT macdeployqt HINTS ${qt_install_prefix} ${QT_DIR} ${Qt6_DIR} ${CMAKE_PREFIX_PATH} PATH_SUFFIXES bin)
+        if (MACDEPLOYQT)
+            if (DEFINED MAC_SIGNING_IDENTITY)
+                add_custom_command(
+                        TARGET openkj
+                        COMMAND "${MACDEPLOYQT}"
+                        VERBATIM
+                        ARGS
+                        "${CMAKE_BINARY_DIR}/openkj.app"
+                        -codesign=${MAC_SIGNING_IDENTITY}
+                        "-appstore-compliant"
+                )
             else ()
-                message("Can't find macdeployqt")
+                add_custom_command(
+                        TARGET openkj
+                        COMMAND "${MACDEPLOYQT}"
+                        ARGS "${CMAKE_BINARY_DIR}/openkj.app"
+                )
             endif ()
         else ()
-            message("QT_INSTALL_DIR not defined")
+            message(STATUS "macdeployqt not found (optional)")
         endif ()
-        if (DEFINED BUNDLE_GSTREAMER)
+    endif ()
+    if (DEFINED BUNDLE_GSTREAMER)
             message("Installing GStreamer framework into app bundle")
             install(
                     DIRECTORY "/Library/Frameworks/GStreamer.framework.dist"
@@ -741,27 +746,31 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     )
 
     if (DEFINED DEPLOY_DEPS)
-        get_target_property(_qt5_qmake_location Qt5::qmake IMPORTED_LOCATION)
-        execute_process(
-                COMMAND "${_qt5_qmake_location}" -query QT_INSTALL_PREFIX
-                RESULT_VARIABLE return_code
-                OUTPUT_VARIABLE qt5_install_prefix
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-        install(DIRECTORY "${GST_BASE_PATH}/bin/" DESTINATION "bin")
-        if (qt5_install_prefix)
-            find_program(WINDEPLOYQT windeployqt HINTS ${qt5_install_prefix} PATH_SUFFIXES bin)
-            if (WINDEPLOYQT)
-                add_custom_command(
-                        TARGET openkj
-                        COMMAND "${WINDEPLOYQT}"
-                        ARGS "${CMAKE_BINARY_DIR}\\openkj.exe"
-                )
-            else ()
-                message("Can't find windeployqt")
-            endif ()
+        if (TARGET Qt6::qmake)
+            get_target_property(_qt_qmake_location Qt6::qmake IMPORTED_LOCATION)
+        elseif (TARGET Qt5::qmake)
+            get_target_property(_qt_qmake_location Qt5::qmake IMPORTED_LOCATION)
         else ()
-            message("QT_INSTALL_DIR not defined")
+            find_program(_qt_qmake_location qmake HINTS ${QT_DIR} ${Qt6_DIR} ${CMAKE_PREFIX_PATH} PATH_SUFFIXES bin)
+        endif ()
+        if (_qt_qmake_location)
+            execute_process(
+                    COMMAND "${_qt_qmake_location}" -query QT_INSTALL_PREFIX
+                    RESULT_VARIABLE return_code
+                    OUTPUT_VARIABLE qt_install_prefix
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+        endif ()
+        install(DIRECTORY "${GST_BASE_PATH}/bin/" DESTINATION "bin")
+        find_program(WINDEPLOYQT windeployqt HINTS ${qt_install_prefix} ${QT_DIR} ${Qt6_DIR} ${CMAKE_PREFIX_PATH} PATH_SUFFIXES bin)
+        if (WINDEPLOYQT)
+            add_custom_command(
+                    TARGET openkj
+                    COMMAND "${WINDEPLOYQT}"
+                    ARGS "${CMAKE_BINARY_DIR}\\openkj.exe"
+            )
+        else ()
+            message(STATUS "windeployqt not found (optional)")
         endif ()
         add_custom_command(
                 TARGET openkj
