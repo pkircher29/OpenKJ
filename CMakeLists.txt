@@ -732,7 +732,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
             )
         endif ()
     endif ()
-endif ()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     add_executable(openkj
