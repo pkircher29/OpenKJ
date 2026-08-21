@@ -18,7 +18,7 @@ bool require(bool condition, const char *message)
 #ifndef Q_OS_LINUX
 QString settingsFilePath()
 {
-    QDir dataDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
+    QDir dataDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     dataDir.mkpath(dataDir.absolutePath());
     return dataDir.absoluteFilePath("openkj.ini");
 }
