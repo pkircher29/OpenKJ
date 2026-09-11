@@ -1,0 +1,52 @@
+# Laundry room motion lighting
+#
+# Turns the laundry lights on as soon as motion is detected and turns them
+# off once the room has been clear for a few minutes.
+#
+# Replace the two entity IDs below with your own:
+#   binary_sensor.laundry_motion  -> your motion / occupancy sensor
+#   light.laundry_lights          -> your laundry light (or a light group)
+#
+# Install: Settings -> Automations & Scenes -> Create Automation ->
+# (three-dot menu) Edit in YAML -> paste everything below this comment block.
+# Or append it to automations.yaml and reload automations.
+
+alias: Laundry lights on motion
+description: Turn the laundry lights on when someone walks in and off after the room has been empty for a while.
+mode: restart
+
+triggers:
+  # Someone walked in.
+  - trigger: state
+    entity_id: binary_sensor.laundry_motion
+    to: "on"
+    id: motion_detected
+
+  # The room has been clear for the full timeout. Using a second trigger
+  # (instead of a delay inside the action) means the lights still turn off
+  # correctly even if Home Assistant restarts or automations are reloaded
+  # while you are in the room.
+  - trigger: state
+    entity_id: binary_sensor.laundry_motion
+    to: "off"
+    for:
+      minutes: 5
+    id: room_clear
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: motion_detected
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: light.laundry_lights
+
+      - conditions:
+          - condition: trigger
+            id: room_clear
+        sequence:
+          - action: light.turn_off
+            target:
+              entity_id: light.laundry_lights
