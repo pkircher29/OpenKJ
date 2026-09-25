@@ -803,5 +803,20 @@ if (BUILD_TESTING)
             Qt${QT_VERSION_MAJOR}::Widgets
     )
     add_test(NAME settings_security_regression COMMAND openkj_settings_security_regression)
+
+    add_executable(openkj_bm_column_layout_regression
+            tests/bm_column_layout_regression.cpp
+            src/settings.cpp
+            src/simplecrypt.cpp
+    )
+    target_include_directories(openkj_bm_column_layout_regression PRIVATE src)
+    target_link_libraries(openkj_bm_column_layout_regression PRIVATE
+            Qt${QT_VERSION_MAJOR}::Core
+            Qt${QT_VERSION_MAJOR}::Gui
+            Qt${QT_VERSION_MAJOR}::Widgets
+    )
+    add_test(NAME bm_column_layout_regression COMMAND openkj_bm_column_layout_regression)
+    set_tests_properties(bm_column_layout_regression PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif ()
 
