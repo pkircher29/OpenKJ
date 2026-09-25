@@ -6,6 +6,7 @@
 #include <QImage>
 #include <memory>
 #include <QTimer>
+#include <vector>
 #include "settings.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/async_logger.h>
@@ -54,6 +55,14 @@ public:
     void updateSongHistory(int songId);
     okj::KaraokeSong &getSong(int songId);
     void markSongBad(QString path);
+    // Puts a song marked bad back into library searches. Returns false when
+    // the path is not a bad song or the database update fails.
+    bool restoreSong(const QString &path);
+    [[nodiscard]] std::vector<std::shared_ptr<okj::KaraokeSong>> badSongs() const;
+    // Best-effort recovery for songs marked bad before the original disc ID
+    // was stored. Search text is "filename artist title discid".
+    [[nodiscard]] static QString recoverDiscIdFromSearchString(const QString &filename, const QString &artist,
+                                                               const QString &title, const QString &searchString);
     DeleteStatus removeBadSong(QString path);
     QString findCdgAudioFile(const QString& path);
     int addSong(okj::KaraokeSong song);

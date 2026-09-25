@@ -22,7 +22,9 @@
 #include "ui_dlgdatabase.h"
 #include <QDebug>
 #include <QFileDialog>
+#include <QHeaderView>
 #include <QInputDialog>
+#include <QMenu>
 #include <QSqlQuery>
 #include <QMessageBox>
 #include "dbupdater.h"
@@ -40,6 +42,11 @@ DlgDatabase::DlgDatabase(TableModelKaraokeSongs &dbModel, QWidget *parent) :
     ui->tableViewFolders->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     ui->tableViewFolders->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     connect(ui->tableViewFolders->selectionModel(), &QItemSelectionModel::selectionChanged, this, &DlgDatabase::on_foldersSelectionChanged);
+    ui->tableBadSongs->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    ui->tableBadSongs->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    ui->tableBadSongs->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    ui->tableBadSongs->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    connect(ui->tableBadSongs->selectionModel(), &QItemSelectionModel::selectionChanged, this, &DlgDatabase::on_badSongsSelectionChanged);
     updateButtonsState();
     customPatternsDlg = new DlgCustomPatterns(this);
     dbUpdateDlg = new DlgDbUpdate(this);
@@ -210,6 +217,7 @@ void DlgDatabase::scan(bool scanAllPaths)
     dbUpdateDlg->hide();
     QMessageBox::information(this, tr("Update Complete"), tr("Database update complete."));
     emit databaseUpdateComplete();
+    refreshBadSongs();
 }
 
 void DlgDatabase::on_btnClearDatabase_clicked()
@@ -229,6 +237,7 @@ void DlgDatabase::on_btnClearDatabase_clicked()
         query.exec("DELETE FROM queuesongs");
         query.exec("DELETE FROM rotationsingers");
         emit databaseCleared();
+        refreshBadSongs();
         QMessageBox::information(this, tr("Database cleared"), tr("Song database, regular singers, and all rotation data has been cleared."));
     }
 }
@@ -299,5 +308,92 @@ void DlgDatabase::updateButtonsState()
 
     auto model = ui->tableViewFolders->model();
     ui->buttonUpdateAll->setEnabled(model && model->rowCount() > 0);
+}
+
+void DlgDatabase::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    refreshBadSongs();
+}
+
+void DlgDatabase::refreshBadSongs()
+{
+    const auto songs = m_dbModel.badSongs();
+    ui->tableBadSongs->setSortingEnabled(false);
+    ui->tableBadSongs->clearContents();
+    ui->tableBadSongs->setRowCount(static_cast<int>(songs.size()));
+    for (int row = 0; row < static_cast<int>(songs.size()); ++row) {
+        const auto &song = songs.at(static_cast<size_t>(row));
+        auto *artistItem = new QTableWidgetItem(song->artist);
+        artistItem->setData(Qt::UserRole, song->path);
+        artistItem->setToolTip(song->path);
+        auto *titleItem = new QTableWidgetItem(song->title);
+        titleItem->setToolTip(song->path);
+        auto *songIdItem = new QTableWidgetItem(song->songid);
+        songIdItem->setToolTip(song->path);
+        auto *filenameItem = new QTableWidgetItem(song->filename);
+        filenameItem->setToolTip(song->path);
+        ui->tableBadSongs->setItem(row, 0, artistItem);
+        ui->tableBadSongs->setItem(row, 1, titleItem);
+        ui->tableBadSongs->setItem(row, 2, songIdItem);
+        ui->tableBadSongs->setItem(row, 3, filenameItem);
+    }
+    ui->tableBadSongs->setSortingEnabled(true);
+    ui->buttonRestoreBadSong->setEnabled(false);
+}
+
+void DlgDatabase::on_badSongsSelectionChanged()
+{
+    ui->buttonRestoreBadSong->setEnabled(ui->tableBadSongs->selectionModel()->selectedRows().count() > 0);
+}
+
+void DlgDatabase::on_tableBadSongs_customContextMenuRequested(const QPoint &pos)
+{
+    const QModelIndex index = ui->tableBadSongs->indexAt(pos);
+    if (!index.isValid())
+        return;
+    ui->tableBadSongs->selectRow(index.row());
+    QMenu contextMenu(this);
+    contextMenu.addAction(tr("Restore"), this, &DlgDatabase::on_buttonRestoreBadSong_clicked);
+    contextMenu.exec(QCursor::pos());
+}
+
+void DlgDatabase::on_buttonRestoreBadSong_clicked()
+{
+    const auto rows = ui->tableBadSongs->selectionModel()->selectedRows();
+    if (rows.isEmpty())
+        return;
+    const int row = rows.first().row();
+    auto *artistItem = ui->tableBadSongs->item(row, 0);
+    if (!artistItem)
+        return;
+    const QString path = artistItem->data(Qt::UserRole).toString();
+    const QString artist = artistItem->text();
+    const QString title = ui->tableBadSongs->item(row, 1) ? ui->tableBadSongs->item(row, 1)->text() : QString();
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Restore song?"));
+    msgBox.setText(tr("Restore this song so it shows up in the library again?"));
+    msgBox.setInformativeText(artist + " - " + title + "\n" + path);
+    msgBox.setIcon(QMessageBox::Question);
+    auto *restoreButton = msgBox.addButton(tr("Restore"), QMessageBox::ActionRole);
+    msgBox.addButton(QMessageBox::Cancel);
+    msgBox.exec();
+    if (msgBox.clickedButton() != restoreButton)
+        return;
+
+    if (!m_dbModel.restoreSong(path)) {
+        QMessageBox::warning(this, tr("Restore failed"),
+                             tr("The song could not be restored. It may no longer be marked bad."));
+        refreshBadSongs();
+        return;
+    }
+
+    QMessageBox result(this);
+    result.setWindowTitle(tr("Song restored"));
+    result.setText(tr("Song restored and will show up in searches again."));
+    result.setIcon(QMessageBox::Information);
+    result.exec();
+    refreshBadSongs();
 }
 

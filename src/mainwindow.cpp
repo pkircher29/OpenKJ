@@ -1272,6 +1272,14 @@ void MainWindow::dbInit(const QDir &okjDataDir) {
                            singersQuery.value("name").toString().toStdString());
         }
     }
+    if (schemaVersion < 107) {
+        m_logger->info("{} Updating database schema to version 107", m_loggingPrefix);
+        // Original disc IDs were overwritten with !!BAD!!. Keep the previous
+        // value so a song marked bad can be restored.
+        query.exec("ALTER TABLE dbsongs ADD COLUMN saveddiscid TEXT");
+        query.exec("PRAGMA user_version = 107");
+        m_logger->info("{} DB Schema update to v107 completed", m_loggingPrefix);
+    }
 }
 
 
@@ -2528,7 +2536,9 @@ void MainWindow::markSongBad(const std::shared_ptr<okj::KaraokeSong>& song) {
     msgBox.exec();
     if (msgBox.clickedButton() == markBadButton) {
         m_karaokeSongsModel.markSongBad(song->path);
-        msgBoxResult.setText("File marked as bad and will no longer show up in searches.");
+        msgBoxResult.setText(
+                "File marked as bad and will no longer show up in searches.\n\n"
+                "To put it back, open Karaoke → Manage Karaoke DB and restore it from Songs marked bad.");
         msgBoxResult.setIcon(QMessageBox::Information);
         msgBoxResult.exec();
     } else if (msgBox.clickedButton() == removeFileButton) {

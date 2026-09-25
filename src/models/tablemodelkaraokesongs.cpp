@@ -168,33 +168,114 @@ QVariant TableModelKaraokeSongs::getItemDisplayData(const QModelIndex &index) co
     }
 }
 
+namespace {
+
+bool isSentinelDiscId(const QString &discId)
+{
+    return discId == QLatin1String("!!BAD!!") || discId == QLatin1String("!!DROPPED!!");
+}
+
+QString usableDiscId(const QString &discId)
+{
+    return isSentinelDiscId(discId) ? QString() : discId;
+}
+
+} // namespace
+
+QString TableModelKaraokeSongs::recoverDiscIdFromSearchString(const QString &filename, const QString &artist,
+                                                              const QString &title, const QString &searchString)
+{
+    if (searchString.isEmpty())
+        return {};
+
+    QStringList names;
+    if (!filename.isEmpty())
+        names.append(filename);
+    const QString baseName = QFileInfo(filename).completeBaseName();
+    if (!baseName.isEmpty() && baseName != filename)
+        names.append(baseName);
+
+    for (const QString &name : names) {
+        const QString prefix = name + QLatin1Char(' ') + artist + QLatin1Char(' ') + title + QLatin1Char(' ');
+        if (!searchString.startsWith(prefix, Qt::CaseInsensitive))
+            continue;
+        const QString recovered = searchString.mid(prefix.size()).trimmed();
+        if (!isSentinelDiscId(recovered))
+            return recovered;
+    }
+    return {};
+}
+
 void TableModelKaraokeSongs::loadData() {
     emit layoutAboutToBeChanged();
     m_allSongs.clear();
     m_filteredSongs.clear();
     QSqlQuery query;
-    query.exec("SELECT songid,artist,title,discid,duration,filename,path,searchstring,plays,lastplay FROM dbsongs");
+    if (!query.exec(
+                "SELECT songid,artist,title,discid,duration,filename,path,searchstring,plays,lastplay,saveddiscid FROM dbsongs")) {
+        m_logger->error("{} Failed to load karaoke songs: {}", m_loggingPrefix, query.lastError().text().toStdString());
+        emit layoutChanged();
+        return;
+    }
     if (query.size() > 0)
         m_filteredSongs.reserve(query.size());
+
+    struct DiscIdRepair {
+        int id;
+        QString savedDiscId;
+    };
+    std::vector<DiscIdRepair> repairs;
+
     while (query.next()) {
-        auto song = m_allSongs.emplace_back(std::make_shared<okj::KaraokeSong>(okj::KaraokeSong{
+        const QString discId = query.value(3).toString();
+        const bool bad = discId == QLatin1String("!!BAD!!");
+        const QString rawSearch = query.value(7).toString();
+        QString songId = discId;
+        if (bad) {
+            const QVariant savedValue = query.value(10);
+            if (!savedValue.isNull()) {
+                songId = usableDiscId(savedValue.toString());
+            } else {
+                const QString recovered = recoverDiscIdFromSearchString(
+                        query.value(5).toString(), query.value(1).toString(), query.value(2).toString(), rawSearch);
+                songId = usableDiscId(recovered);
+                if (!songId.isEmpty())
+                    repairs.push_back({query.value(0).toInt(), songId});
+            }
+        }
+        m_allSongs.emplace_back(std::make_shared<okj::KaraokeSong>(okj::KaraokeSong{
                 query.value(0).toInt(),
                 query.value(1).toString(),
                 query.value(1).toString().toLower(),
                 query.value(2).toString(),
                 query.value(2).toString().toLower(),
-                query.value(3).toString(),
-                query.value(3).toString().toLower(),
+                songId,
+                songId.toLower(),
                 query.value(4).toInt(),
                 query.value(5).toString(),
                 query.value(6).toString(),
-                query.value(7).toString().replace('&', " and ").toLower(),
+                QString(rawSearch).replace('&', " and ").toLower(),
                 query.value(8).toInt(),
                 query.value(9).toDateTime(),
-                (query.value(3).toString() == "!!BAD!!"),
-                (query.value(3).toString() == "!!DROPPED!!")
+                bad,
+                (discId == QLatin1String("!!DROPPED!!"))
         }));
     }
+
+    if (!repairs.empty()) {
+        QSqlQuery repair;
+        repair.prepare(
+                "UPDATE dbsongs SET saveddiscid = :saved WHERE songid = :id AND saveddiscid IS NULL");
+        for (const auto &item : repairs) {
+            repair.bindValue(":saved", item.savedDiscId);
+            repair.bindValue(":id", item.id);
+            if (!repair.exec()) {
+                m_logger->error("{} Failed to save recovered disc ID for song {}: {}", m_loggingPrefix, item.id,
+                                repair.lastError().text().toStdString());
+            }
+        }
+    }
+
     m_logger->info("{} Loaded {} karaoke songs from the db on disk", m_loggingPrefix, m_filteredSongs.size());
     search(m_lastSearch);
     emit layoutChanged();
@@ -424,9 +505,15 @@ void TableModelKaraokeSongs::setSongDuration(const QString &path, unsigned int d
 
 void TableModelKaraokeSongs::markSongBad(QString path) {
     QSqlQuery query;
-    query.prepare("UPDATE dbsongs SET discid='!!BAD!!' WHERE path == :path");
+    // Keep the real disc ID in saveddiscid. !!BAD!! is only the hidden-song marker.
+    query.prepare(
+            "UPDATE dbsongs SET saveddiscid = CASE WHEN discid IN ('!!BAD!!', '!!DROPPED!!') THEN saveddiscid ELSE discid END, "
+            "discid = '!!BAD!!' WHERE path == :path");
     query.bindValue(":path", path);
-    query.exec();
+    if (!query.exec()) {
+        m_logger->error("{} Failed to mark song bad: {}", m_loggingPrefix, query.lastError().text().toStdString());
+        return;
+    }
 
     emit layoutAboutToBeChanged();
     auto newFilteredEnd = std::remove_if(m_filteredSongs.begin(), m_filteredSongs.end(),
@@ -442,6 +529,51 @@ void TableModelKaraokeSongs::markSongBad(QString path) {
                                          });
     if (songEntry != m_allSongs.end())
         songEntry->get()->bad = true;
+}
+
+bool TableModelKaraokeSongs::restoreSong(const QString &path) {
+    auto songEntry = std::find_if(m_allSongs.begin(), m_allSongs.end(),
+                                  [&path](const std::shared_ptr<okj::KaraokeSong> &song) {
+                                      return song->path == path;
+                                  });
+    if (songEntry == m_allSongs.end() || !songEntry->get()->bad)
+        return false;
+
+    auto &song = *songEntry->get();
+    const QString restoredId = usableDiscId(song.songid);
+    const QString newSearchString =
+            QFileInfo(song.path).completeBaseName() + " " + song.artist + " " + song.title + " " + restoredId;
+
+    QSqlQuery query;
+    query.prepare(
+            "UPDATE dbsongs SET discid = :discid, saveddiscid = NULL, searchstring = :searchstring "
+            "WHERE path == :path AND discid = '!!BAD!!'");
+    query.bindValue(":discid", restoredId);
+    query.bindValue(":searchstring", newSearchString);
+    query.bindValue(":path", path);
+    if (!query.exec()) {
+        m_logger->error("{} Failed to restore song: {}", m_loggingPrefix, query.lastError().text().toStdString());
+        return false;
+    }
+    // 0 means the row was not marked bad. -1 means the driver could not count rows.
+    if (query.numRowsAffected() == 0)
+        return false;
+
+    song.bad = false;
+    song.songid = restoredId;
+    song.songidL = restoredId.toLower();
+    song.searchString = QString(newSearchString).replace('&', " and ").toLower();
+    searchExec();
+    return true;
+}
+
+std::vector<std::shared_ptr<okj::KaraokeSong>> TableModelKaraokeSongs::badSongs() const {
+    std::vector<std::shared_ptr<okj::KaraokeSong>> songs;
+    for (const auto &song : m_allSongs) {
+        if (song->bad)
+            songs.push_back(song);
+    }
+    return songs;
 }
 
 TableModelKaraokeSongs::DeleteStatus TableModelKaraokeSongs::removeBadSong(QString path) {

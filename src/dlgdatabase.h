@@ -24,6 +24,7 @@
 #include <QDialog>
 #include <QDir>
 #include <QDirIterator>
+#include <QShowEvent>
 #include "src/models/tablemodelkaraokesourcedirs.h"
 #include "dlgcustompatterns.h"
 #include <QSqlDatabase>
@@ -51,10 +52,14 @@ private:
 
     void scan(bool scanAllPaths);
     void updateButtonsState();
+    void refreshBadSongs();
 
 public:
     explicit DlgDatabase(TableModelKaraokeSongs &dbModel, QWidget *parent = nullptr);
     ~DlgDatabase() override;
+
+protected:
+    void showEvent(QShowEvent *event) override;
 
 signals:
     void databaseAboutToUpdate();
@@ -76,6 +81,9 @@ private slots:
     void on_btnCustomPatterns_clicked();
     void on_btnExport_clicked();
     void on_foldersSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
+    void on_buttonRestoreBadSong_clicked();
+    void on_tableBadSongs_customContextMenuRequested(const QPoint &pos);
+    void on_badSongsSelectionChanged();
 };
 
 #endif // DATABASEDIALOG_H
