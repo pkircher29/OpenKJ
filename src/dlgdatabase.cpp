@@ -29,6 +29,7 @@
 #include <QMessageBox>
 #include "dbupdater.h"
 #include <QStandardPaths>
+#include <QTimer>
 
 DlgDatabase::DlgDatabase(TableModelKaraokeSongs &dbModel, QWidget *parent) :
     QDialog(parent),
@@ -218,6 +219,19 @@ void DlgDatabase::scan(bool scanAllPaths)
     QMessageBox::information(this, tr("Update Complete"), tr("Database update complete."));
     emit databaseUpdateComplete();
     refreshBadSongs();
+    // OpenKJ#262: dismissing the modal completion dialog drops this non-modal
+    // window behind the main window on macOS. Raise it again after those close
+    // events have been processed.
+    raiseAndActivate();
+    QTimer::singleShot(0, this, [this]() { raiseAndActivate(); });
+}
+
+void DlgDatabase::raiseAndActivate()
+{
+    if (!isVisible())
+        return;
+    raise();
+    activateWindow();
 }
 
 void DlgDatabase::on_btnClearDatabase_clicked()
