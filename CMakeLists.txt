@@ -803,5 +803,28 @@ if (BUILD_TESTING)
             Qt${QT_VERSION_MAJOR}::Widgets
     )
     add_test(NAME settings_security_regression COMMAND openkj_settings_security_regression)
+
+    add_executable(openkj_library_edit_selection_regression
+            tests/library_edit_selection_regression.cpp
+            src/models/tablemodelkaraokesongs.cpp
+            src/settings.cpp
+            src/simplecrypt.cpp
+    )
+    target_include_directories(openkj_library_edit_selection_regression PRIVATE src)
+    target_link_libraries(openkj_library_edit_selection_regression PRIVATE
+            Qt${QT_VERSION_MAJOR}::Core
+            Qt${QT_VERSION_MAJOR}::Gui
+            Qt${QT_VERSION_MAJOR}::Widgets
+            Qt${QT_VERSION_MAJOR}::Sql
+            Qt${QT_VERSION_MAJOR}::Svg
+    )
+    if (EXTERNAL_SPDLOG)
+        target_compile_definitions(openkj_library_edit_selection_regression PRIVATE SPDLOG_FMT_EXTERNAL)
+        target_link_libraries(openkj_library_edit_selection_regression PRIVATE PkgConfig::SPDLOG)
+    else ()
+        target_link_libraries(openkj_library_edit_selection_regression PRIVATE spdlog)
+        target_include_directories(openkj_library_edit_selection_regression PRIVATE src/3rdparty/spdlog/include)
+    endif ()
+    add_test(NAME library_edit_selection_regression COMMAND openkj_library_edit_selection_regression)
 endif ()
 

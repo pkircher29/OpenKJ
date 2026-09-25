@@ -211,51 +211,94 @@ void TableModelKaraokeSongs::search(const QString &searchString) {
     searchTimer.start(100);
 }
 
+bool TableModelKaraokeSongs::matchesCurrentSearch(const std::shared_ptr<okj::KaraokeSong> &song) {
+    if (song->dropped || song->bad)
+        return false;
+    QString haystack;
+    switch (m_searchType) {
+        case TableModelKaraokeSongs::SEARCH_TYPE_ALL:
+            haystack = song->searchString;
+            break;
+        case TableModelKaraokeSongs::SEARCH_TYPE_ARTIST:
+            haystack = song->artistL;
+            haystack.replace('&', " and ");
+            break;
+        case TableModelKaraokeSongs::SEARCH_TYPE_TITLE:
+            haystack = song->titleL;
+            haystack.replace('&', " and ");
+            break;
+    }
+    if (m_settings.ignoreAposInSearch())
+        haystack.remove('\'');
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
+    const auto needles = m_lastSearch.split(' ', QString::SplitBehavior::SkipEmptyParts);
+#else
+    const auto needles = m_lastSearch.split(' ', Qt::SplitBehavior(Qt::SkipEmptyParts));
+#endif
+    for (const auto &needle : needles) {
+        if (!haystack.contains(needle))
+            return false;
+    }
+    return true;
+}
+
 void TableModelKaraokeSongs::searchExec() {
     searchTimer.stop();
     emit layoutAboutToBeChanged();
     m_filteredSongs.clear();
     m_filteredSongs.reserve(m_allSongs.size());
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    auto needles = m_lastSearch.split(' ', QString::SplitBehavior::SkipEmptyParts);
-#else
-    auto needles = m_lastSearch.split(' ', Qt::SplitBehavior(Qt::SkipEmptyParts));
-#endif
     for (const auto &song : m_allSongs) {
-        if (song->dropped)
-            continue;
-        if (song->bad)
-            continue;
-        QString haystack;
-        switch (m_searchType) {
-            case TableModelKaraokeSongs::SEARCH_TYPE_ALL: {
-                haystack = song->searchString;
-                break;
-            }
-            case TableModelKaraokeSongs::SEARCH_TYPE_ARTIST: {
-                haystack = song->artistL;
-                haystack.replace('&', " and ");
-                break;
-            }
-            case TableModelKaraokeSongs::SEARCH_TYPE_TITLE: {
-                haystack = song->titleL;
-                haystack.replace('&', " and ");
-                break;
-            }
-        }
-        if (m_settings.ignoreAposInSearch())
-            haystack.remove('\'');
-        bool match{true};
-        for (const auto &needle : needles) {
-            if (!haystack.contains(needle)) {
-                match = false;
-                break;
-            }
-        }
-        if (match)
+        if (matchesCurrentSearch(song))
             m_filteredSongs.emplace_back(song);
     }
     emit layoutChanged();
+}
+
+int TableModelKaraokeSongs::updateEditedSong(const int songId, const QString &artist, const QString &title,
+                                             const QString &discId, const QString &filename, const QString &path) {
+    const auto it = std::find_if(m_allSongs.begin(), m_allSongs.end(),
+                                 [&songId](const std::shared_ptr<okj::KaraokeSong> &song) {
+                                     return song->id == songId;
+                                 });
+    if (it == m_allSongs.end())
+        return -1;
+
+    okj::KaraokeSong &song = **it;
+    song.artist = artist;
+    song.artistL = artist.toLower();
+    song.title = title;
+    song.titleL = title.toLower();
+    song.songid = discId;
+    song.songidL = discId.toLower();
+    song.filename = filename;
+    song.path = path;
+    song.searchString = QFileInfo(path).completeBaseName() + " " + artist + " " + title + " " + discId;
+    song.searchString.replace('&', " and ");
+    song.searchString = song.searchString.toLower();
+    song.bad = (discId == "!!BAD!!");
+    song.dropped = (discId == "!!DROPPED!!");
+
+    const auto filtered = std::find_if(m_filteredSongs.begin(), m_filteredSongs.end(),
+                                       [&songId](const std::shared_ptr<okj::KaraokeSong> &entry) {
+                                           return entry->id == songId;
+                                       });
+    if (filtered == m_filteredSongs.end())
+        return -1;
+
+    const int row = static_cast<int>(std::distance(m_filteredSongs.begin(), filtered));
+    if (!matchesCurrentSearch(*filtered)) {
+        beginRemoveRows(QModelIndex(), row, row);
+        m_filteredSongs.erase(filtered);
+        endRemoveRows();
+        if (m_filteredSongs.empty())
+            return -1;
+        if (row >= static_cast<int>(m_filteredSongs.size()))
+            return static_cast<int>(m_filteredSongs.size()) - 1;
+        return row;
+    }
+
+    emit dataChanged(index(row, COL_ARTIST), index(row, COL_FILENAME));
+    return row;
 }
 
 void TableModelKaraokeSongs::setSearchType(TableModelKaraokeSongs::SearchType type) {

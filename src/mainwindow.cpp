@@ -2319,6 +2319,16 @@ void MainWindow::editSong(const std::shared_ptr<okj::KaraokeSong>& song) {
         return;
     if (song->artist == dlg.artist() && song->title == dlg.title() && song->songid == dlg.songId())
         return;
+    const auto finishSuccessfulEdit = [&](const QString &detail, const QString &filename, const QString &path) {
+        const int row = m_karaokeSongsModel.updateEditedSong(
+                song->id, dlg.artist(), dlg.title(), dlg.songId(), filename, path);
+        QMessageBox msgBoxInfo;
+        msgBoxInfo.setText("Edit successful");
+        msgBoxInfo.setInformativeText(detail);
+        msgBoxInfo.setStandardButtons(QMessageBox::Ok);
+        msgBoxInfo.exec();
+        keepEditedSongInView(row);
+    };
     if (dlg.renameFile()) {
         if (!QFileInfo(song->path).isWritable()) {
             QMessageBox msgBoxErr;
@@ -2473,12 +2483,8 @@ void MainWindow::editSong(const std::shared_ptr<okj::KaraokeSong>& song) {
             msgBoxErr.exec();
             return;
         } else {
-            QMessageBox msgBoxInfo;
-            msgBoxInfo.setText("Edit successful");
-            msgBoxInfo.setInformativeText("The file has been renamed and the database has been updated successfully.");
-            msgBoxInfo.setStandardButtons(QMessageBox::Ok);
-            msgBoxInfo.exec();
-            m_karaokeSongsModel.loadData();
+            finishSuccessfulEdit(
+                    "The file has been renamed and the database has been updated successfully.", newFn, newPath);
             return;
         }
     } else {
@@ -2504,15 +2510,19 @@ void MainWindow::editSong(const std::shared_ptr<okj::KaraokeSong>& song) {
             msgBoxErr.exec();
             return;
         } else {
-            QMessageBox msgBoxInfo;
-            msgBoxInfo.setText("Edit successful");
-            msgBoxInfo.setInformativeText("The database has been updated successfully.");
-            msgBoxInfo.setStandardButtons(QMessageBox::Ok);
-            msgBoxInfo.exec();
-            m_karaokeSongsModel.loadData();
+            finishSuccessfulEdit("The database has been updated successfully.", song->filename, song->path);
             return;
         }
     }
+}
+
+void MainWindow::keepEditedSongInView(const int row) {
+    if (row < 0 || row >= m_karaokeSongsModel.rowCount(QModelIndex()))
+        return;
+    const QModelIndex index = m_karaokeSongsModel.index(row, TableModelKaraokeSongs::COL_ARTIST);
+    ui->tableViewDB->selectRow(row);
+    ui->tableViewDB->setCurrentIndex(index);
+    ui->tableViewDB->scrollTo(index, QAbstractItemView::EnsureVisible);
 }
 
 void MainWindow::markSongBad(const std::shared_ptr<okj::KaraokeSong>& song) {
