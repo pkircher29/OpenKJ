@@ -41,11 +41,14 @@ DlgEq::DlgEq(QWidget *parent) :
         ui->verticalSliderEqB9,
         ui->verticalSliderEqB10
     };
+    // `band` is a constructor local. Capture it by value: a reference capture
+    // is dangling once this function returns, so every later slider move reads
+    // a garbage index (equalizer property "band<junk>", then a crash or a no-op).
     int band{0};
     for (auto &slider : eqSliderControlsK)
     {
         slider->setValue(m_settings.getEqKLevel(band));
-        connect(slider, &QSlider::valueChanged, [&]( int newValue ) {
+        connect(slider, &QSlider::valueChanged, this, [this, band](int newValue) {
             m_settings.setEqKLevel(band, newValue);
             emit karEqLevelChanged(band, newValue);
         });
@@ -55,7 +58,7 @@ DlgEq::DlgEq(QWidget *parent) :
     for (auto &slider : eqSliderControlsB)
     {
         slider->setValue(m_settings.getEqBLevel(band));
-        connect(slider, &QSlider::valueChanged, [&]( int newValue ) {
+        connect(slider, &QSlider::valueChanged, this, [this, band](int newValue) {
             m_settings.setEqBLevel(band, newValue);
             emit bmEqLevelChanged(band, newValue);
         });
