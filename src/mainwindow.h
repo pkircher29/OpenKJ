@@ -171,6 +171,7 @@ private:
     bool bmPlaylistExists(const QString& name);
     void addSfxButton(const QString &filename, const QString &label, bool reset = false);
     void refreshSfxButtons();
+    void keepEditedSongInView(int row);
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
