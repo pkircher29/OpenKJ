@@ -418,7 +418,7 @@ TransparentWidget::~TransparentWidget()
 
 void TransparentWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    this->move(event->globalPos() + m_startPoint);
+    this->move(event->globalPosition().toPoint() + m_startPoint);
     m_settings.setDurationPosition(this->pos());
 }
 
@@ -430,7 +430,7 @@ void TransparentWidget::moveEvent(QMoveEvent *event)
 
 void TransparentWidget::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
-        m_startPoint = frameGeometry().topLeft() - event->globalPos();
+        m_startPoint = frameGeometry().topLeft() - event->globalPosition().toPoint();
     }
 }
 
