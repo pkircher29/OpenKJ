@@ -20,6 +20,7 @@
 
 #include <qglobal.h>
 #include "mainwindow.h"
+#include "bmcolumnlayout.h"
 #include "ui_mainwindow.h"
 #include <QMessageBox>
 #include <QMenu>
@@ -753,8 +754,20 @@ void MainWindow::loadSettings() {
     ui->comboBoxBmPlaylists->setCurrentIndex(m_settings.bmPlaylistIndex());
     ui->actionDisplay_Filenames->setChecked(m_settings.bmShowFilenames());
     ui->actionDisplay_Metadata->setChecked(m_settings.bmShowMetadata());
-    actionDisplayFilenamesToggled(m_settings.bmShowFilenames());
-    actionDisplayMetadataToggled(m_settings.bmShowMetadata());
+    setBmColumnVisibility(m_settings.bmShowMetadata(), m_settings.bmShowFilenames());
+    const QFont bmFont = m_settings.applicationFont();
+    const bool bmStateRestored = m_settings.restoreColumnWidths(ui->tableViewBmDb)
+                                 && m_settings.restoreColumnWidths(ui->tableViewBmPlaylist);
+    // Saved hidden flags must not override Display Metadata / Display Filenames.
+    setBmColumnVisibility(m_settings.bmShowMetadata(), m_settings.bmShowFilenames());
+    if (!bmStateRestored
+        || !okj::breakMusicHeaderIsSensible(ui->tableViewBmDb->horizontalHeader(), false, bmFont)
+        || !okj::breakMusicHeaderIsSensible(ui->tableViewBmPlaylist->horizontalHeader(), true, bmFont)) {
+        autosizeBmViews();
+    } else {
+        okj::configureBreakMusicHeader(ui->tableViewBmDb->horizontalHeader(), bmFont);
+        okj::configureBreakMusicHeader(ui->tableViewBmPlaylist->horizontalHeader(), bmFont);
+    }
     m_settings.restoreSplitterState(ui->splitterBm);
     m_settings.restoreSplitterState(ui->splitter_3);
     if (m_settings.mplxMode() == Multiplex_Normal)
@@ -2862,19 +2875,24 @@ bool MainWindow::bmPlaylistExists(const QString &name) {
     return false;
 }
 
+void MainWindow::setBmColumnVisibility(bool metadata, bool filenames) {
+    ui->tableViewBmDb->setColumnHidden(TableModelBreakSongs::COL_ARTIST, !metadata);
+    ui->tableViewBmDb->setColumnHidden(TableModelBreakSongs::COL_TITLE, !metadata);
+    ui->tableViewBmPlaylist->setColumnHidden(TableModelPlaylistSongs::COL_ARTIST, !metadata);
+    ui->tableViewBmPlaylist->setColumnHidden(TableModelPlaylistSongs::COL_TITLE, !metadata);
+    ui->tableViewBmDb->setColumnHidden(TableModelBreakSongs::COL_FILENAME, !filenames);
+    ui->tableViewBmPlaylist->setColumnHidden(TableModelPlaylistSongs::COL_FILENAME, !filenames);
+}
+
 void MainWindow::actionDisplayMetadataToggled(const bool &arg1) {
-    ui->tableViewBmDb->setColumnHidden(TableModelBreakSongs::COL_ARTIST, !arg1);
-    ui->tableViewBmDb->setColumnHidden(TableModelBreakSongs::COL_TITLE, !arg1);
-    ui->tableViewBmPlaylist->setColumnHidden(TableModelPlaylistSongs::COL_ARTIST, !arg1);
-    ui->tableViewBmPlaylist->setColumnHidden(TableModelPlaylistSongs::COL_TITLE, !arg1);
     m_settings.bmSetShowMetadata(arg1);
+    setBmColumnVisibility(arg1, m_settings.bmShowFilenames());
     autosizeBmViews();
 }
 
 void MainWindow::actionDisplayFilenamesToggled(const bool &arg1) {
-    ui->tableViewBmDb->setColumnHidden(TableModelBreakSongs::COL_FILENAME, !arg1);
-    ui->tableViewBmPlaylist->setColumnHidden(TableModelPlaylistSongs::COL_FILENAME, !arg1);
     m_settings.bmSetShowFilenames(arg1);
+    setBmColumnVisibility(m_settings.bmShowMetadata(), arg1);
     autosizeBmViews();
 }
 
@@ -3397,58 +3415,31 @@ void MainWindow::autosizeHistoryCols() {
 }
 
 void MainWindow::autosizeBmViews() {
+    static_assert(TableModelBreakSongs::COL_ID == okj::BmDbCol::id);
+    static_assert(TableModelBreakSongs::COL_ARTIST == okj::BmDbCol::artist);
+    static_assert(TableModelBreakSongs::COL_TITLE == okj::BmDbCol::title);
+    static_assert(TableModelBreakSongs::COL_FILENAME == okj::BmDbCol::filename);
+    static_assert(TableModelBreakSongs::COL_DURATION == okj::BmDbCol::duration);
+    static_assert(TableModelPlaylistSongs::COL_ID == okj::BmPlaylistCol::id);
+    static_assert(TableModelPlaylistSongs::COL_POSITION == okj::BmPlaylistCol::position);
+    static_assert(TableModelPlaylistSongs::COL_ARTIST == okj::BmPlaylistCol::artist);
+    static_assert(TableModelPlaylistSongs::COL_TITLE == okj::BmPlaylistCol::title);
+    static_assert(TableModelPlaylistSongs::COL_FILENAME == okj::BmPlaylistCol::filename);
+    static_assert(TableModelPlaylistSongs::COL_DURATION == okj::BmPlaylistCol::duration);
+    static_assert(TableModelPlaylistSongs::COL_PATH == okj::BmPlaylistCol::path);
 
-    int fH = QFontMetrics(m_settings.applicationFont()).height();
-    int iconWidth = fH + fH;
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    int durationColSize = QFontMetrics(m_settings.applicationFont()).horizontalAdvance("Duration") + fH;
-#else
-    int durationColSize = QFontMetrics(m_settings.applicationFont()).width("Duration") + fH;
-#endif
-    // 4 = filename 1 = metadata artist 2 = metadata title
-
-    int artistColSize = 0;
-    int titleColSize = 0;
-    int fileNameColSize = 0;
-    int remainingSpace = ui->tableViewBmDb->width() - durationColSize - 15;
-    if (m_settings.bmShowMetadata() && m_settings.bmShowFilenames()) {
-        artistColSize = (int) ((float) remainingSpace * .25);
-        titleColSize = (int) ((float) remainingSpace * .25);
-        fileNameColSize = (int) ((float) remainingSpace * .5);
-    } else if (m_settings.bmShowMetadata()) {
-        artistColSize = (int) ((float) remainingSpace * .5);
-        titleColSize = (int) ((float) remainingSpace * .5);
-    } else if (m_settings.bmShowFilenames()) {
-        fileNameColSize = remainingSpace;
-    }
-    ui->tableViewBmDb->horizontalHeader()->resizeSection(TableModelBreakSongs::COL_ARTIST, artistColSize);
-    ui->tableViewBmDb->horizontalHeader()->resizeSection(TableModelBreakSongs::COL_TITLE, titleColSize);
-    ui->tableViewBmDb->horizontalHeader()->resizeSection(TableModelBreakSongs::COL_FILENAME, fileNameColSize);
-    ui->tableViewBmDb->horizontalHeader()->setSectionResizeMode(TableModelBreakSongs::COL_DURATION, QHeaderView::Fixed);
-    ui->tableViewBmDb->horizontalHeader()->resizeSection(TableModelBreakSongs::COL_DURATION, durationColSize);
-
-
-    remainingSpace = ui->tableViewBmPlaylist->width() - durationColSize - (iconWidth * 2) - 15;
-    if (m_settings.bmShowMetadata() && m_settings.bmShowFilenames()) {
-        artistColSize = (int) ((float) remainingSpace * .25);
-        titleColSize = (int) ((float) remainingSpace * .25);
-        fileNameColSize = (int) ((float) remainingSpace * .5);
-    } else if (m_settings.bmShowMetadata()) {
-        artistColSize = (int) ((float) remainingSpace * .5);
-        titleColSize = (int) ((float) remainingSpace * .5);
-    } else if (m_settings.bmShowFilenames()) {
-        fileNameColSize = remainingSpace;
-    }
-    ui->tableViewBmPlaylist->horizontalHeader()->resizeSection(TableModelPlaylistSongs::COL_ARTIST, artistColSize);
-    ui->tableViewBmPlaylist->horizontalHeader()->resizeSection(TableModelPlaylistSongs::COL_TITLE, titleColSize);
-    ui->tableViewBmPlaylist->horizontalHeader()->resizeSection(TableModelPlaylistSongs::COL_FILENAME, fileNameColSize);
-    ui->tableViewBmPlaylist->horizontalHeader()->resizeSection(TableModelPlaylistSongs::COL_DURATION, durationColSize);
-    ui->tableViewBmPlaylist->horizontalHeader()->setSectionResizeMode(TableModelPlaylistSongs::COL_ID,
-                                                                      QHeaderView::Fixed);
-    ui->tableViewBmPlaylist->horizontalHeader()->resizeSection(TableModelPlaylistSongs::COL_ID, iconWidth);
-    ui->tableViewBmPlaylist->horizontalHeader()->setSectionResizeMode(TableModelPlaylistSongs::COL_PATH,
-                                                                      QHeaderView::Fixed);
-    ui->tableViewBmPlaylist->horizontalHeader()->resizeSection(TableModelPlaylistSongs::COL_PATH, iconWidth);
+    const QFont font = m_settings.applicationFont();
+    const bool showMetadata = m_settings.bmShowMetadata();
+    const bool showFilenames = m_settings.bmShowFilenames();
+    const bool dbLaidOut = okj::applyBreakMusicColumns(ui->tableViewBmDb, false, showMetadata, showFilenames, font);
+    const bool playlistLaidOut = okj::applyBreakMusicColumns(ui->tableViewBmPlaylist, true, showMetadata, showFilenames,
+                                                            font);
+    // Hidden pages report a useless width. Redo the proportional layout once the
+    // break-music tab is actually on screen.
+    if (!dbLaidOut || !playlistLaidOut)
+        m_bNeedAutoSize = true;
+    else
+        m_bNeedAutoSize = false;
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
@@ -3464,7 +3455,6 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
     }
     if (ui->tabWidget->currentIndex() == 1) {
         autosizeBmViews();
-        m_bNeedAutoSize = false;
         m_kNeedAutoSize = true;
     }
     m_settings.saveWindowState(this);
@@ -3472,8 +3462,11 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
 
 void MainWindow::tabWidgetCurrentChanged(const int &index) {
     if (m_bNeedAutoSize && index == 1) {
-        autosizeBmViews();
-        m_bNeedAutoSize = false;
+        // Let the stacked page take its geometry before measuring columns.
+        QTimer::singleShot(0, this, [this] {
+            if (ui->tabWidget->currentIndex() == 1)
+                autosizeBmViews();
+        });
     }
     if (m_kNeedAutoSize && index == 0) {
         autosizeViews();

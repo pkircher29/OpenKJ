@@ -19,6 +19,7 @@
 */
 
 #include "settings.h"
+#include "bmcolumnlayout.h"
 #include <QCoreApplication>
 #include <QApplication>
 #include <QStandardPaths>
@@ -435,12 +436,25 @@ void Settings::saveColumnWidths(QTreeView *treeView)
 
 void Settings::saveColumnWidths(QTableView *tableView)
 {
+    if (tableView->objectName().isEmpty())
+        return;
+    QHeaderView *header = tableView->horizontalHeader();
+    for (int i = 0; i < header->count(); ++i) {
+        // sectionSize() is 0 while a column is hidden; that is expected.
+        // A visible column of width 0 is a collapsed layout and must not be persisted.
+        if (!header->isSectionHidden(i) && header->sectionSize(i) <= 0) {
+            settings->remove(tableView->objectName());
+            return;
+        }
+    }
+    // Drop leftover section groups from an older column count before writing.
+    settings->remove(tableView->objectName());
     settings->beginGroup(tableView->objectName());
-    for (int i=0; i < tableView->horizontalHeader()->count(); i++)
+    for (int i=0; i < header->count(); i++)
     {
         settings->beginGroup(QString::number(i));
-        settings->setValue("size", tableView->horizontalHeader()->sectionSize(i));
-        settings->setValue("hidden", tableView->horizontalHeader()->isSectionHidden(i));
+        settings->setValue("size", header->sectionSize(i));
+        settings->setValue("hidden", header->isSectionHidden(i));
         settings->endGroup();
     }
     settings->endGroup();
@@ -458,21 +472,38 @@ void Settings::restoreColumnWidths(QTreeView *treeView)
 
 bool Settings::restoreColumnWidths(QTableView *tableView)
 {
-    if (m_safeStartupMode || !settings->childGroups().contains(tableView->objectName()))
+    if (m_safeStartupMode || tableView->objectName().isEmpty()
+        || !settings->childGroups().contains(tableView->objectName()))
         return false;
     settings->beginGroup(tableView->objectName());
-    QStringList headers = settings->childGroups();
-    for (int i=0; i < headers.size(); i++)
+    const QStringList headers = settings->childGroups();
+    std::vector<okj::SavedHeaderSection> sections;
+    sections.reserve(static_cast<size_t>(headers.size()));
+    for (const QString &name : headers)
     {
-        settings->beginGroup(headers.at(i));
-        int section = headers.at(i).toInt();
-        bool hidden = settings->value("hidden", false).toBool();
-        int size = settings->value("size", 0).toInt();
-        tableView->horizontalHeader()->resizeSection(section, size);
-        tableView->horizontalHeader()->setSectionHidden(section, hidden);
+        bool indexOk = false;
+        const int section = name.toInt(&indexOk);
+        settings->beginGroup(name);
+        okj::SavedHeaderSection saved;
+        saved.index = section;
+        saved.indexOk = indexOk;
+        saved.size = settings->value("size", 0).toInt();
+        saved.hidden = settings->value("hidden", false).toBool();
         settings->endGroup();
+        sections.push_back(saved);
     }
     settings->endGroup();
+
+    const int columnCount = tableView->horizontalHeader()->count();
+    if (!okj::savedTableHeaderStateIsUsable(columnCount, sections))
+        return false;
+
+    QHeaderView *header = tableView->horizontalHeader();
+    for (const okj::SavedHeaderSection &saved : sections)
+    {
+        header->resizeSection(saved.index, std::max(0, saved.size));
+        header->setSectionHidden(saved.index, saved.hidden);
+    }
     return true;
 }
 
