@@ -28,7 +28,7 @@ jobs:
       with:
         submodules: recursive
 
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: step-security/gha-setup-ninja@v6
 
     - name: Download GST Installers
       shell: powershell
@@ -97,7 +97,7 @@ jobs:
       run: cmake --build .
 
     - name: Upload executable artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: Windows ${{ matrix.arch }} binary
         path: build/openkj.exe
