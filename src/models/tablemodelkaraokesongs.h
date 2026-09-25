@@ -51,6 +51,10 @@ public:
     void setSearchType(SearchType type);
     int getIdForPath(const QString &path);
     QString getPath(int songId);
+    // Updates the in-memory song after a library edit. Returns the filtered row to
+    // keep selected, or -1 when the filtered list has no row to select.
+    int updateEditedSong(int songId, const QString &artist, const QString &title, const QString &discId,
+                         const QString &filename, const QString &path);
     void updateSongHistory(int songId);
     okj::KaraokeSong &getSong(int songId);
     void markSongBad(QString path);
@@ -78,6 +82,7 @@ private:
     QTimer searchTimer{this};
 
     void searchExec();
+    [[nodiscard]] bool matchesCurrentSearch(const std::shared_ptr<okj::KaraokeSong> &song);
     static QVariant getColumnName(int section) ;
     [[nodiscard]] QVariant getColumnSizeHint(int section) const;
     [[nodiscard]] QVariant getItemDisplayData(const QModelIndex &index) const;
