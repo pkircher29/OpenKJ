@@ -803,5 +803,27 @@ if (BUILD_TESTING)
             Qt${QT_VERSION_MAJOR}::Widgets
     )
     add_test(NAME settings_security_regression COMMAND openkj_settings_security_regression)
+
+    add_executable(openkj_bad_song_restore_regression
+            tests/bad_song_restore_regression.cpp
+            src/models/tablemodelkaraokesongs.cpp
+            src/settings.cpp
+            src/simplecrypt.cpp
+    )
+    target_include_directories(openkj_bad_song_restore_regression PRIVATE src)
+    target_link_libraries(openkj_bad_song_restore_regression PRIVATE
+            Qt${QT_VERSION_MAJOR}::Core
+            Qt${QT_VERSION_MAJOR}::Gui
+            Qt${QT_VERSION_MAJOR}::Widgets
+            Qt${QT_VERSION_MAJOR}::Sql
+            Qt${QT_VERSION_MAJOR}::Svg
+            spdlog
+    )
+    if (EXTERNAL_SPDLOG)
+        target_link_libraries(openkj_bad_song_restore_regression PRIVATE PkgConfig::SPDLOG)
+    endif ()
+    add_test(NAME bad_song_restore_regression COMMAND openkj_bad_song_restore_regression)
+    set_tests_properties(bad_song_restore_regression PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif ()
 
