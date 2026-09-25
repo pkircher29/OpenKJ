@@ -222,6 +222,7 @@ private slots:
     void autosizeViews();
     void autosizeQueueCols();
     void autosizeBmViews();
+    void setBmColumnVisibility(bool metadata, bool filenames);
     void autosizeHistoryCols();
     void bmDbUpdated();
     void bmDbCleared();
