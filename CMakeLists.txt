@@ -781,6 +781,17 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     endif ()
 endif ()
 
+# fmt 9+ has no formatter for QString. Inject the specialization into every
+# C++ translation unit of the app (including moc output) so log statements
+# compile whether or not that file included the header itself. C sources such
+# as miniz.c are left alone.
+if(TARGET openkj)
+    target_compile_options(openkj PRIVATE
+            "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/FIqstringfmt.h>"
+            "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-includeqstringfmt.h>"
+    )
+endif()
+
 include(CTest)
 if (BUILD_TESTING)
     add_executable(openkj_cdg_scroll_regression

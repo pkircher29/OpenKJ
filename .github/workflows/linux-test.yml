@@ -1,0 +1,33 @@
+name: Linux build test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Linux build
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build qt6-base-dev libqt6svg6-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtag1-dev libspdlog-dev
+
+    - name: Configure and build
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --parallel
+
+    - name: Run regression tests
+      run: ctest --test-dir build --output-on-failure
