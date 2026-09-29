@@ -53,6 +53,7 @@ private:
     void scan(bool scanAllPaths);
     void updateButtonsState();
     void refreshBadSongs();
+    void raiseAndActivate();
 
 public:
     explicit DlgDatabase(TableModelKaraokeSongs &dbModel, QWidget *parent = nullptr);
