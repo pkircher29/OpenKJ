@@ -501,7 +501,7 @@ bool Settings::restoreColumnWidths(QTableView *tableView)
     QHeaderView *header = tableView->horizontalHeader();
     for (const okj::SavedHeaderSection &saved : sections)
     {
-        header->resizeSection(saved.index, std::max(0, saved.size));
+        header->resizeSection(saved.index, (std::max)(0, saved.size)); // parens: dodge windows.h max macro
         header->setSectionHidden(saved.index, saved.hidden);
     }
     return true;
