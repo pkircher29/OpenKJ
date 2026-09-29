@@ -103,7 +103,8 @@ int main(int argc, char **argv)
             "path TEXT,"
             "searchstring TEXT,"
             "plays INTEGER,"
-            "lastplay TEXT)"), "create dbsongs"))
+            "lastplay TEXT,"
+            "saveddiscid TEXT)"), "create dbsongs"))
         return 1;
 
     if (!insertSong(1, "Plain One", "First", "SC1")
