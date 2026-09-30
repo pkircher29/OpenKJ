@@ -1,3 +1,13 @@
+# OpenKJ 3.0.2 — Security and Maintenance Update
+
+- Keep break-music columns readable and reject invalid saved layouts.
+- Import playlist metadata safely when song names contain quotes.
+- Use HTTPS for updates, analytics and web search; validate update versions and encode search text safely.
+- Verify build dependency downloads and update spdlog to 1.17.0.
+- Enable compiler hardening and pin GitHub Actions to reviewed revisions.
+- Compile the application during CodeQL analysis and update Linux application metadata.
+- Add security regression coverage and fix Windows test compatibility.
+
 # OpenKJ 3.0.0 — Reliability & Performance Audit Release
 
 **Audit date:** August 5, 2026

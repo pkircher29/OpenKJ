@@ -38,6 +38,11 @@
         <binary>openkj</binary>
     </provides>
     <releases>
+        <release version="3.0.2" date="2026-09-29">
+            <description>
+                <p>Safer playlist imports, HTTPS and update validation, hardened builds, and readable break-music columns.</p>
+            </description>
+        </release>
         <release version="2.1.38" date="2022-08-12">
             <description>
                 <ul>
