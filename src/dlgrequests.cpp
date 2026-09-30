@@ -19,6 +19,7 @@
 */
 
 #include "dlgrequests.h"
+#include "requestsearchurl.h"
 #include "ui_dlgrequests.h"
 #include <QDesktopServices>
 #include <QMenu>
@@ -534,8 +535,7 @@ void DlgRequests::on_spinBoxKey_valueChanged(int arg1) {
 }
 
 void DlgRequests::on_pushButtonWebSearch_clicked() {
-    QString link = "http://db.openkj.org/?type=All&searchstr=" + ui->lineEditSearch->text();
-    QDesktopServices::openUrl(QUrl(link));
+    QDesktopServices::openUrl(requestSearchUrl(ui->lineEditSearch->text()));
 }
 
 

@@ -1,4 +1,5 @@
 #include "updatechecker.h"
+#include "updateversion.h"
 #include <QApplication>
 #include <QDebug>
 #include <QJsonDocument>
@@ -59,7 +60,7 @@ void UpdateChecker::checkForUpdates()
         return;
     qInfo() << "Requesting current version info for branch: " << channel;
     connect(manager, &QNetworkAccessManager::finished, this, &UpdateChecker::onNetworkReply);
-    [[maybe_unused]]QNetworkReply *reply = manager->get(QNetworkRequest(QUrl("http://openkj.org/downloads/" + OS + "-" + channel + "-curversion.txt")));
+    [[maybe_unused]]QNetworkReply *reply = manager->get(QNetworkRequest(QUrl("https://openkj.org/downloads/" + OS + "-" + channel + "-curversion.txt")));
 //    while (!reply->isFinished())
 //        QApplication::processEvents();
 //    qInfo() << "Request completed";
@@ -68,6 +69,7 @@ void UpdateChecker::checkForUpdates()
 void UpdateChecker::onNetworkReply(QNetworkReply *reply)
 {
     qInfo() << "Received network reply";
+    reply->deleteLater();
     if (reply->error() != QNetworkReply::NoError)
     {
         qInfo() << reply->errorString();
@@ -76,27 +78,16 @@ void UpdateChecker::onNetworkReply(QNetworkReply *reply)
     }
     availVersion = QString(reply->readAll());
     availVersion = availVersion.trimmed();
-    QStringList curVersionParts = currentVer.split(".");
-    QStringList availVersionParts = availVersion.split(".");
-    if (availVersionParts.size() != 3 || curVersionParts.size() != 3)
+    const auto parsedVersion = parseUpdateVersion(availVersion);
+    if (!parsedVersion)
     {
         qInfo() << "Got invalid version info from server";
         return;
     }
-    int availMajor = availVersionParts.at(0).toInt();
-    int availMinor = availVersionParts.at(1).toInt();
-    int availRevis = availVersionParts.at(2).toInt();
-    int curMajor = OKJ_VERSION_MAJOR;
-    int curMinor = OKJ_VERSION_MINOR;
-    int curRevis = OKJ_VERSION_BUILD;
-    if (availMajor > curMajor)
-        emit newVersionAvailable(availVersion);
-    else if (availMajor == curMajor && availMinor > curMinor)
-        emit newVersionAvailable(availVersion);
-    else if (availMajor == curMajor && availMinor == curMinor && availRevis > curRevis)
+    const QVersionNumber currentVersion(OKJ_VERSION_MAJOR, OKJ_VERSION_MINOR, OKJ_VERSION_BUILD);
+    if (*parsedVersion > currentVersion)
         emit newVersionAvailable(availVersion);
     qInfo() << "Received version: " << availVersion << " Current version: " << currentVer;
-    reply->deleteLater();
     disconnect(manager, &QNetworkAccessManager::finished, this, &UpdateChecker::onNetworkReply);
 
     connect(manager, &QNetworkAccessManager::finished, this, &UpdateChecker::aOnNetworkReply);
@@ -109,7 +100,7 @@ void UpdateChecker::onNetworkReply(QNetworkReply *reply)
     jsonObject.insert("arch", QSysInfo::currentCpuArchitecture());
     QJsonDocument jsonDocument;
     jsonDocument.setObject(jsonObject);
-    QNetworkRequest request(QUrl("http://openkj.org/appanalytics"));
+    QNetworkRequest request(QUrl("https://openkj.org/appanalytics"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     reply = manager->post(request, jsonDocument.toJson());
 

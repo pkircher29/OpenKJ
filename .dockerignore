@@ -1,0 +1,8 @@
+.git
+.codebase-memory
+build*
+dist*
+output*
+.env
+.env.*
+*.log

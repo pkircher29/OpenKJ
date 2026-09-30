@@ -1,6 +1,10 @@
 #ifndef OPENKJ_QSTRINGFMT_H
 #define OPENKJ_QSTRINGFMT_H
 
+// Visual Studio can share target-level forced includes across C and C++.
+// Leave this header empty for bundled C sources such as miniz.c.
+#ifdef __cplusplus
+
 #include <QString>
 #include <string>
 #include <spdlog/fmt/fmt.h>
@@ -22,4 +26,5 @@ struct formatter<QString> : formatter<std::string> {
 }
 #endif
 
-#endif
+#endif // __cplusplus
+#endif // OPENKJ_QSTRINGFMT_H

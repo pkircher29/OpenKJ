@@ -27,6 +27,8 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(cmake/Hardening.cmake)
+
 find_package(Qt6 REQUIRED COMPONENTS Gui Sql Network Widgets Concurrent Svg PrintSupport)
 
 include_directories(
@@ -86,7 +88,11 @@ if (NOT EXTERNAL_SPDLOG)
     else ()
         message(STATUS "No spdlog install found or CPM spdlog forced, pulling it in via CPM")
         include(cmake/CPM.cmake)
-        CPMAddPackage("gh:gabime/spdlog@1.8.2")
+        # Keep the immutable CPM revision in sync with the bundled submodule.
+        CPMAddPackage(NAME spdlog
+                GITHUB_REPOSITORY gabime/spdlog
+                GIT_TAG 79524ddd08a4ec981b7fea76afd08ee05f83755d # v1.17.0
+        )
     endif ()
 endif ()
 
@@ -786,6 +792,11 @@ endif ()
 # compile whether or not that file included the header itself. C sources such
 # as miniz.c are left alone.
 if(TARGET openkj)
+    if (MSVC)
+        # Bundled TagLib uses CRT APIs deprecated by MSVC. Keep /sdl runtime
+        # checks without promoting those vendor deprecations to build errors.
+        target_compile_definitions(openkj PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif ()
     target_compile_options(openkj PRIVATE
             "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/FIqstringfmt.h>"
             "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-includeqstringfmt.h>"
@@ -794,6 +805,11 @@ endif()
 
 include(CTest)
 if (BUILD_TESTING)
+    add_executable(openkj_upstream_security_regression tests/upstream_security_regression.cpp)
+    target_include_directories(openkj_upstream_security_regression PRIVATE src)
+    target_link_libraries(openkj_upstream_security_regression PRIVATE Qt6::Core Qt6::Sql)
+    add_test(NAME upstream_security_regression COMMAND openkj_upstream_security_regression)
+
     add_executable(openkj_cdg_scroll_regression
             tests/cdg_scroll_regression.cpp
             src/cdg/cdgimageframe.cpp

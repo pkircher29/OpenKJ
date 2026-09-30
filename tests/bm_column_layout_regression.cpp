@@ -2,6 +2,7 @@
 #include "settings.h"
 
 #include <QApplication>
+#include <QDir>
 #include <QFont>
 #include <QHeaderView>
 #include <QSettings>
@@ -32,6 +33,18 @@ void zeroManagedSections(QHeaderView *header)
     header->setMinimumSectionSize(0);
     for (int section = 0; section < header->count(); ++section)
         header->resizeSection(section, 0);
+}
+
+QSettings rawSettings()
+{
+#ifdef Q_OS_LINUX
+    return QSettings();
+#else
+    // Match Settings' INI backend. Default QSettings reads the registry on
+    // Windows, which tests a different store and bypasses Qt's test directory.
+    const QDir dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    return QSettings(dir.filePath("openkj.ini"), QSettings::IniFormat);
+#endif
 }
 
 } // namespace
@@ -136,7 +149,7 @@ int main(int argc, char **argv)
 
     Settings settings;
     auto savedSize = [](const QString &viewName, int section) {
-        QSettings raw;
+        auto raw = rawSettings();
         raw.beginGroup(viewName);
         raw.beginGroup(QString::number(section));
         const int size = raw.value("size", -1).toInt();
@@ -175,7 +188,7 @@ int main(int argc, char **argv)
     ok &= require(dbHeader->sectionSize(okj::BmDbCol::artist) == 140, "rejected restore changed the artist column");
 
     {
-        QSettings raw;
+        auto raw = rawSettings();
         raw.beginGroup("tableViewBmDb");
         for (int section = 0; section < okj::BmDbCol::count; ++section) {
             raw.beginGroup(QString::number(section));
@@ -192,7 +205,7 @@ int main(int argc, char **argv)
     ok &= require(dbHeader->sectionSize(okj::BmDbCol::artist) == 155, "invalid header state overwrote artist");
 
     {
-        QSettings raw;
+        auto raw = rawSettings();
         raw.beginGroup("tableViewBmDb");
         raw.remove("");
         for (int section = 0; section < okj::BmDbCol::count - 1; ++section) {

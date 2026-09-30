@@ -20,6 +20,7 @@
 
 #include <qglobal.h>
 #include "mainwindow.h"
+#include "playlistimportutil.h"
 #include "bmcolumnlayout.h"
 #include "ui_mainwindow.h"
 #include <QMessageBox>
@@ -2989,11 +2990,8 @@ void MainWindow::actionPlaylistImportTriggered() {
                 QString artist = reader.getArtist();
                 QString title = reader.getTitle();
                 QString filename = QFileInfo(files.at(i)).fileName();
-                QString queryString =
-                        "INSERT OR IGNORE INTO bmsongs (artist,title,path,filename,duration,searchstring) VALUES(\"" +
-                        artist + "\",\"" + title + "\",\"" + files.at(i) + "\",\"" + filename + "\",\"" + duration +
-                        "\",\"" + artist + title + filename + "\")";
-                query.exec(queryString);
+                if (!insertPlaylistSong(query, artist, title, files.at(i), filename, duration.toLongLong()))
+                    qWarning() << "Unable to import playlist song:" << query.lastError();
             } else if (QFile(importPath + "/" + files.at(i)).exists()) {
                 reader.setMedia(importPath + "/" + files.at(i).toLocal8Bit());
                 QString duration = QString::number(reader.getDuration() / 1000);
@@ -3001,16 +2999,8 @@ void MainWindow::actionPlaylistImportTriggered() {
                 QString title = reader.getTitle();
                 QString filename = QFileInfo(files.at(i)).fileName();
                 QString path = importPath + "/" + files.at(i);
-                QString searchstring = artist + " " + title + " " + filename;
-                QString queryString = "INSERT OR IGNORE INTO bmsongs (artist,title,path,filename,duration,searchstring) VALUES(:artist,:title,:path,:filename,:duration,:searchstring)";
-                query.prepare(queryString);
-                query.bindValue(":artist", artist);
-                query.bindValue(":title", title);
-                query.bindValue(":path", path);
-                query.bindValue(":filename", filename);
-                query.bindValue(":duration", duration);
-                query.bindValue(":searchstring", searchstring);
-                query.exec();
+                if (!insertPlaylistSong(query, artist, title, path, filename, duration.toLongLong()))
+                    qWarning() << "Unable to import playlist song:" << query.lastError();
             }
         }
         query.exec("COMMIT TRANSACTION");
@@ -3239,7 +3229,7 @@ void MainWindow::songDropNoSingerSel() {
 void MainWindow::newVersionAvailable(const QString &version) {
     QMessageBox msgBox;
     msgBox.setTextFormat(Qt::RichText);
-    msgBox.setText("New version of OpenKJ is available: " + version);
+    msgBox.setText("New version of OpenKJ is available: " + version.toHtmlEscaped());
     msgBox.setIcon(QMessageBox::Information);
     if (m_updateChecker->getOS() == "Linux") {
         msgBox.setInformativeText(
